@@ -105,8 +105,10 @@ if __name__ == '__main__':
     
     async def main():
         # 示例：使用Playwright抓取HTML页面（可手动过验证码）
+        # url = "https://archive.ph/https://www.bloomberg.com/news/articles/2026-01-21/ex-bridgewater-executive-is-hired-by-florida-based-cv-advisors"
+        url = "https://archive.ph/https://www.bloomberg.com/news/articles/2026-01-23/another-russian-shadow-fleet-oil-tanker-runs-into-difficulties"
         html = await html_with_playwright_onece(
-            "https://archive.ph/https://www.bloomberg.com/news/articles/2026-01-21/ex-bridgewater-executive-is-hired-by-florida-based-cv-advisors",
+            url,
             headless=False,
             wait_seconds=1,
             save=False

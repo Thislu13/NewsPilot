@@ -75,20 +75,48 @@ def extract(html: str) -> dict:
     main = soup.find('main')
     article = main.find('article')
     title = main.select('article > div')[1].text
-    content_all = main.select('article > div')[-2]
+    
+    content_all = main.select('article')[0].select('article > div')[4]
     ch = next(content_all.children)
+        
     content = ch.find('div', attrs={'style':'display:block;min-width:0px;'}).find_all('div', recursive=False)[2]
-    content_list = []
-    for c in content.find_all('div', recursive=False):
-        # print(c)
-        for tag in c.children:
-            if tag.name == 'a':
-                content_list.append(f'[{tag.text}]({tag["href"]})')
-            elif hasattr(tag, 'text'):
-                content_list.append(tag.text)
+    
+    
+    def parser_div(tag):
+        if hasattr(tag, 'text'):
+            return [tag.text]
+        else:
+            return [str(tag)]
+    def parser_a(tag):
+        return [f'[{tag.text}]({tag["href"]})']
+    def parser_default(tag):
+        if hasattr(tag, 'text'):
+            return [tag.text]
+        else:
+            return [str(tag)]
+    def parser_blockquote(tag): 
+        return ["```blockquote\n\n"]+parser_content(tag)+['```']
+
+    parser_dict = {
+        'div': parser_div,
+        'a': parser_a,
+        'blockquote': parser_blockquote,
+        'default': parser_default,
+    }
+
+    def parser_content(content):
+        content_list = []
+        for tag in content.find_all(recursive=False):
+            name = tag.name
+            if name in parser_dict.keys():
+                func = parser_dict[name]
             else:
-                content_list.append(tag)
-        content_list.append('\n\n')
+                func = parser_dict['default']
+            content_list.extend(func(tag))
+            content_list.append('\n\n')
+        return content_list
+    content_list = parser_content(content)
+    
     if content_list:
         data["content_text"] = "".join(content_list)
         data["content_html"] = data["content_text"]

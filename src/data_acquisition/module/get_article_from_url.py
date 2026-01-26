@@ -162,9 +162,12 @@ async def fetch_full_article_by_url(
 if __name__ == "__main__":
     import asyncio
 
-    test_url = "https://www.bloomberg.com/news/articles/2026-01-21/ex-bridgewater-executive-is-hired-by-florida-based-cv-advisors"
-    async def main():
-        article = await fetch_full_article_by_url(test_url)
-        print(article)
+    test_url_list = ["https://www.bloomberg.com/news/articles/2026-01-21/ex-bridgewater-executive-is-hired-by-florida-based-cv-advisors",
+                     "https://www.bloomberg.com/news/articles/2026-01-23/another-russian-shadow-fleet-oil-tanker-runs-into-difficulties"]
+    for test_url in test_url_list:
+        async def main():
+            article = await fetch_full_article_by_url(test_url)
+            print('='*100)
+            print(article['body'])
 
-    asyncio.run(main())
+        asyncio.run(main())

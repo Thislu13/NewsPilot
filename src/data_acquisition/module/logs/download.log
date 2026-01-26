@@ -20,3 +20,37 @@
 2026-01-26 14:43:34,659 - INFO - 正在抓取新闻页面: https://archive.ph/MkuJK
 2026-01-26 14:53:05,804 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
 2026-01-26 14:53:14,865 - INFO - 正在抓取新闻页面: https://archive.ph/MkuJK
+2026-01-26 15:35:28,557 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-26 15:35:58,855 - ERROR - Playwright抓取失败: Timeout 30000ms exceeded.
+2026-01-26 15:37:52,566 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-26 15:38:01,044 - ERROR - Playwright抓取失败: Page.goto: net::ERR_ABORTED at https://archive.ph/xg79s
+Call log:
+  - navigating to "https://archive.ph/xg79s", waiting until "domcontentloaded"
+
+2026-01-26 15:57:22,193 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-26 15:57:30,900 - INFO - 正在抓取新闻页面: https://archive.ph/xg79s
+2026-01-26 15:57:33,842 - ERROR - Playwright抓取失败: 'NoneType' object has no attribute 'find_all'
+2026-01-26 15:58:25,520 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-26 15:58:27,521 - ERROR - Playwright抓取失败: Target page, context or browser has been closed
+=========================== logs ===========================
+"load" event fired
+============================================================
+2026-01-26 15:58:41,589 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-26 15:58:50,685 - INFO - 正在抓取新闻页面: https://archive.ph/MkuJK
+2026-01-26 15:59:06,290 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-26 15:59:16,040 - INFO - 正在抓取新闻页面: https://archive.ph/xg79s
+2026-01-26 15:59:18,651 - ERROR - Playwright抓取失败: 'NoneType' object has no attribute 'find_all'
+2026-01-26 16:16:22,060 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-26 16:16:44,956 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-26 17:14:12,272 - ERROR - Playwright抓取失败: Page.goto: net::ERR_CONNECTION_CLOSED at https://archive.ph/https://www.bloomberg.com/news/articles/2026-01-23/another-russian-shadow-fleet-oil-tanker-runs-into-difficulties
+Call log:
+  - navigating to "https://archive.ph/https://www.bloomberg.com/news/articles/2026-01-23/another-russian-shadow-fleet-oil-tanker-runs-into-difficulties", waiting until "domcontentloaded"
+
+2026-01-26 17:14:38,071 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-26 17:14:48,677 - INFO - 正在抓取新闻页面: https://archive.ph/MkuJK
+2026-01-26 17:16:55,222 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-26 17:17:03,315 - INFO - 正在抓取新闻页面: https://archive.ph/MkuJK
+2026-01-26 17:18:14,989 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-26 17:18:24,711 - INFO - 正在抓取新闻页面: https://archive.ph/MkuJK
+2026-01-26 17:18:37,084 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-26 17:18:43,748 - INFO - 正在抓取新闻页面: https://archive.ph/xg79s

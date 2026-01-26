@@ -20,3 +20,4 @@ Please use the Async API instead.
 2026-01-26 12:03:30,260 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
 2026-01-26 12:03:38,647 - INFO - 正在抓取新闻页面: https://archive.ph/MkuJK
 2026-01-26 12:03:41,659 - ERROR - Playwright抓取失败: [Errno 2] No such file or directory: 'save\\Ex-Bridgewater Executive Is Hired By Florida Wealth Adviser - Bloomberg.md'
+2026-01-26 15:35:22,611 - ERROR - Playwright抓取失败: Connection closed while reading from the driver

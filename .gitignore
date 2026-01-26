@@ -3,6 +3,8 @@
 data/
 .history/
 save/
+logs/
+test.ipynb
 
 #密钥文件
 config/keys.py
