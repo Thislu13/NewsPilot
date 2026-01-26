@@ -5,7 +5,8 @@ import trafilatura
 from bs4 import BeautifulSoup
 from datetime import datetime
 from readability import Document
-
+from download import html_with_playwright_onece
+from datetime import datetime
 from typing import List, Dict, Any
 
 
@@ -17,6 +18,7 @@ DEFAULT_HEADERS = {
     ),
     "Accept-Language": "en-US,en;q=0.9",
 }
+
 
 async def fetch_full_article_by_url(
     url: str,
@@ -104,30 +106,8 @@ async def fetch_full_article_by_url(
     else:
         result["error"] = "direct_fetch_failed"
 
-    # ======================
-    # 2️⃣ archive.ph 兜底
-    # ======================
-    if not result["success"]:
-
-        archive_url = f"https://archive.ph/{url}"
-        archive_html = await _download(archive_url)
-
-        if archive_html and "wip" not in archive_url:
-            body, confidence, method = _extract(archive_html)
-            if body:
-                result["body"] = body
-                result["confidence"] = confidence * 0.85
-                result["method"] = "archive"
-                result["success"] = True
-                result["error"] = None
-        else:
-            result["error"] = "archive_unavailable"
-
-    # ======================
-    # 3️⃣ title / author 提取
-    # ======================
     if result["success"]:
-        soup = BeautifulSoup(html or archive_html, "lxml")
+        soup = BeautifulSoup(html, "lxml")
 
         # title
         if soup.title and soup.title.string:
@@ -141,6 +121,40 @@ async def fetch_full_article_by_url(
                     a.strip() for a in meta["content"].split(",") if a.strip()
                 ]
                 break
+    
+    # ======================
+    # 2️⃣ archive.ph 兜底
+    # ======================
+    if not result["success"]:
+        archive_url = f"https://archive.ph/{url}"
+        
+        try:
+            # 现在 html_with_playwright_onece 是异步函数，需要使用 await
+            archive_data = await html_with_playwright_onece(archive_url)
+            
+            if archive_data is not None and isinstance(archive_data, dict):
+                result["body"] = archive_data.get('content_text')
+                result["title"] = archive_data.get('title')
+                result["authors"] = [archive_data.get('author')] if archive_data.get('author') else []
+                
+                # 处理时间格式
+                time_str = archive_data.get('time')
+                if time_str:
+                    try:
+                        result["published_at"] = datetime.strptime(time_str, "%Y年%m月%d日 %H:%M:%S %Z")
+                    except ValueError:
+                        # 如果时间格式不匹配，保持为 None
+                        pass
+                
+                result["method"] = "archive"
+                result["confidence"] = 0.6
+                result["success"] = True
+            else:
+                result["error"] = "archive_data_invalid_or_none"
+                
+        except Exception as e:
+            result["error"] = f"archive_fetch_failed: {str(e)}"
+            result["success"] = False
 
     return result
 

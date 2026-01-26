@@ -1,6 +1,8 @@
 
 #数据文件
 data/
+.history/
+save/
 
 #密钥文件
 config/keys.py

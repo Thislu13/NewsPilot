@@ -1,0 +1,22 @@
+2026-01-25 18:00:07,713 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-25 18:00:16,256 - INFO - 正在抓取新闻页面: https://archive.ph/MkuJK
+2026-01-25 18:00:19,351 - ERROR - Playwright抓取失败: [Errno 2] No such file or directory: 'save\\Ex-Bridgewater Executive Is Hired By Florida Wealth Adviser - Bloomberg.md'
+2026-01-25 18:32:40,538 - ERROR - Playwright抓取失败: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead.
+2026-01-26 11:06:43,304 - ERROR - Playwright抓取失败: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead.
+2026-01-26 11:08:46,221 - ERROR - Playwright抓取失败: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead.
+2026-01-26 11:11:47,151 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-26 11:11:55,718 - INFO - 正在抓取新闻页面: https://archive.ph/MkuJK
+2026-01-26 11:58:41,697 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-26 11:58:51,553 - INFO - 正在抓取新闻页面: https://archive.ph/MkuJK
+2026-01-26 11:59:13,763 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-26 11:59:19,448 - INFO - 正在抓取新闻页面: https://archive.ph/MkuJK
+2026-01-26 11:59:23,387 - ERROR - Playwright抓取失败: [Errno 2] No such file or directory: 'save\\Ex-Bridgewater Executive Is Hired By Florida Wealth Adviser - Bloomberg.md'
+2026-01-26 12:01:13,878 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-26 12:01:21,950 - INFO - 正在抓取新闻页面: https://archive.ph/MkuJK
+2026-01-26 12:01:52,164 - ERROR - Playwright抓取失败: Timeout 30000ms exceeded.
+2026-01-26 12:03:30,260 - INFO - 已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。
+2026-01-26 12:03:38,647 - INFO - 正在抓取新闻页面: https://archive.ph/MkuJK
+2026-01-26 12:03:41,659 - ERROR - Playwright抓取失败: [Errno 2] No such file or directory: 'save\\Ex-Bridgewater Executive Is Hired By Florida Wealth Adviser - Bloomberg.md'
