@@ -1,12 +1,12 @@
 import asyncio
 import aiohttp
 import trafilatura
-
 from bs4 import BeautifulSoup
 from datetime import datetime
 from readability import Document
-from download import html_with_playwright_onece
-from datetime import datetime
+
+from src.data_acquisition.module.download import html_with_playwright_onece
+
 from typing import List, Dict, Any
 
 
@@ -20,7 +20,8 @@ DEFAULT_HEADERS = {
 }
 
 
-async def fetch_full_article_by_url(
+
+async def fetch_full_article_by_url_one(
     url: str,
     timeout: int = 8,
     min_body_length: int = 50,
@@ -108,6 +109,7 @@ async def fetch_full_article_by_url(
 
     if result["success"]:
         soup = BeautifulSoup(html, "lxml")
+        soup = BeautifulSoup(html, "lxml")
 
         # title
         if soup.title and soup.title.string:
@@ -159,15 +161,37 @@ async def fetch_full_article_by_url(
     return result
 
 
+def fetch_full_article_by_url(url_list: List[str]) -> List[Dict[str, Any]]:
+    """
+    批量根据 URL 抓取新闻正文（直抓 + archive.ph 兜底）
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    tasks = [
+        fetch_full_article_by_url_one(url)
+        for url in url_list
+    ]
+    results = loop.run_until_complete(asyncio.gather(*tasks))
+    loop.close()
+    return results
+
 if __name__ == "__main__":
     import asyncio
 
     test_url_list = ["https://www.bloomberg.com/news/articles/2026-01-21/ex-bridgewater-executive-is-hired-by-florida-based-cv-advisors",
                      "https://www.bloomberg.com/news/articles/2026-01-23/another-russian-shadow-fleet-oil-tanker-runs-into-difficulties"]
-    for test_url in test_url_list:
-        async def main():
-            article = await fetch_full_article_by_url(test_url)
-            print('='*100)
-            print(article['body'])
+    
+    result = fetch_full_article_by_url(test_url_list)
+    for item in result:
+        print('='*100)
+        print(item['body'])
 
-        asyncio.run(main())
+
+
+    # for test_url in test_url_list:
+    #     async def main():
+    #         article = await fetch_full_article_by_url(test_url)
+    #         print('='*100)
+    #         print(article['body'])
+
+    #     asyncio.run(main())

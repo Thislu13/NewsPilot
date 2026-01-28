@@ -2,7 +2,7 @@
 # Author: WangQiushuo 185886867@qq.com
 # Date: 2025-12-23 21:59:45
 # LastEditors: WangQiushuo 185886867@qq.com
-# LastEditTime: 2026-01-23 23:11:45
+# LastEditTime: 2026-01-25 19:32:13
 # FilePath: \NewsPilot\src\data_acquisition\fetchers\newsapi_fetcher.py
 # Description: 
 # 
@@ -18,7 +18,7 @@ from newsapi import NewsApiClient
 from src.data_acquisition.fetchers.base_fetcher import BaseFetcher
 from core.news_schemas import NewsItemRawSchema, Attachment
 
-from src.data_acquisition.module.get_article_from_url import fetch_full_article_by_url
+from data_acquisition.module.get_content import enrich_full_content
 
 class NewsAPIFetcher(BaseFetcher):
     """
@@ -160,36 +160,13 @@ class NewsAPIFetcher(BaseFetcher):
         完整的工作流：抓取原始数据并进行规范化。
         """
         raw_list = await self.fetch_raw_data()
-        enriched_raw_list = await asyncio.gather(
-            *[self.enrich_full_content(raw) for raw in raw_list]
-        )
-
 
         normalized_list: List[NewsItemRawSchema] = []
-        for raw_item in enriched_raw_list:
+        for raw_item in raw_list:
             normalized = self.normalize_data(raw_item)
             if normalized:
                 normalized_list.append(normalized)
 
-        return normalized_list  
-    
-
-    async def enrich_full_content(self, raw_item: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        使用 NewsAPI 以外的服务丰富新闻的完整内容。
+        enrich_full_content(normalized_list)
         
-        当前实现为占位符，直接返回原始数据。
-        """
-        if not raw_item.get("url"):
-            return raw_item
-
-        full_content_result = await fetch_full_article_by_url(raw_item["url"])
-        if full_content_result.get("success"):
-            raw_item["content"] = full_content_result.get("body") or raw_item.get("content")
-            raw_item["title"] = full_content_result.get("title") or raw_item.get("title")
-            raw_item["authors"] = full_content_result.get("authors") or raw_item.get("authors")
-            raw_item["publishedAt"] = full_content_result.get("published_at") or raw_item.get("publishedAt")
-        else:
-            print(f"无法丰富内容，URL: {raw_item['url']}，错误: {full_content_result.get('error')}")
-        return raw_item
-
+        return normalized_list  
