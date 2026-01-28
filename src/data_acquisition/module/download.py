@@ -3,20 +3,22 @@ import logging
 from typing import Optional
 from pathlib import Path
 from bs4 import BeautifulSoup
-from paser_html import extract
-# 配置日志
-log_dir = Path('logs')
-log_dir.mkdir(exist_ok=True)
+import contextlib
+from src.data_acquisition.module.paser_html import extract
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_dir / 'download.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+# 配置日志
+# log_dir = Path('logs')
+# log_dir.mkdir(exist_ok=True)
+
+# logging.basicConfig(
+#     level=logging.INFO,
+#     format='%(asctime)s - %(levelname)s - %(message)s',
+#     handlers=[
+#         logging.FileHandler(log_dir / 'download.log', encoding='utf-8'),
+#         logging.StreamHandler()
+#     ]
+# )
+# logger = logging.getLogger(__name__)
 
 def parser(html: str) -> tuple[Optional[str], Optional[str]]:
     """
@@ -36,56 +38,79 @@ def parser(html: str) -> tuple[Optional[str], Optional[str]]:
         title = n.get_text().strip()
         return news_url, title
     except Exception as e:
-        logger.error(f"解析HTML失败: {e}")
+        print('ERROR: '+f"解析HTML失败: {e}")
         return None
 
-async def html_with_playwright_onece(
-    url: str,
-    headless: bool = False,
-    wait_seconds: int = 10,
-    save: bool = False
-) -> dict:
-    """
-    使用Playwright(Chromium)抓取HTML，支持手动通过验证码。
 
-    Args:
-        url: 页面链接
-        headless: 是否无头模式
-        wait_seconds: 非交互环境等待秒数
 
-    Returns:
-        data: 抓取的数据字典
-    """
+@contextlib.asynccontextmanager
+async def page_conn(headless=False):
     try:
         from playwright.async_api import async_playwright
+        print('INFO: '+"Playwright模块导入成功")
     except Exception as e:
-        logger.error(f"Playwright未安装或不可用: {e}")
-        return None
+        print('ERROR: '+f"Playwright未安装或不可用: {e}")
+        raise RuntimeError(f"Playwright未安装或不可用: {e}")
 
     try:
+        print('INFO: '+"正在连接Playwright浏览器...")
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=headless)
             context = await browser.new_context()
             page = await context.new_page()
-            await page.goto(url, wait_until='domcontentloaded')
+            yield page
+            await context.close()
+            await browser.close()
+    except Exception as e:
+        print('ERROR: '+f"Playwright连接失败: {e}")
+        raise
 
-            logger.info("已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。")
-            try:
-                # input()
-                pass
-            except EOFError:
-                await page.wait_for_timeout(wait_seconds * 1000)
+async def parser_url(url: str, page, wait_seconds: int = 10) -> dict:
+    await page.goto(url, wait_until='domcontentloaded')
+    print('INFO: '+"已打开页面：如果需要验证码请手动完成，然后回到控制台按回车继续。")
+    try:
+        # input()
+        pass
+    except EOFError:
+        await page.wait_for_timeout(wait_seconds * 1000)
+    print('等待页面加载资源')
+    await page.wait_for_load_state('networkidle')
+    html = await page.content()
+    news_url, title = parser(html)
+    await page.goto(news_url, wait_until='domcontentloaded')
+    print('INFO: '+f"正在抓取新闻页面: {news_url}")
+    await page.wait_for_load_state('networkidle')
+    html = await page.content()
+    auth = title.split('-')[-1].strip()
+    data = extract(html)
+    return title, auth, data
+        
+async def html_with_playwright_onece(
+    url_list: str|list[str],
+    headless: bool = False,
+    wait_seconds: int = 10,
+    save: bool = False
+) -> list[dict]:
+    """
+    使用Playwright(Chromium)抓取HTML，支持手动通过验证码。
 
-            await page.wait_for_load_state('networkidle')
-            html = await page.content()
-            news_url, title = parser(html)
-            await page.goto(news_url, wait_until='domcontentloaded')
-            logger.info(f"正在抓取新闻页面: {news_url}")
-            await page.wait_for_load_state('networkidle')
-            html = await page.content()
-            data = extract(html)
+    Args:
+        url_list: 页面链接列表
+        headless: 是否无头模式
+        wait_seconds: 非交互环境等待秒数
+
+    Returns:
+        data: 抓取的数据字典的列表
+    """
+    if isinstance(url_list, str):
+        url_list = [url_list]
+    result_data = []
+    async with page_conn(headless=headless) as page:
+        assert page is not None, "Playwright页面连接失败"
+        print('INFO: '+"正在启动Playwright浏览器...")
+        for url in url_list:
+            title, auth, data = await parser_url(url, page, wait_seconds=wait_seconds)
             data['title'] = title
-            auth = title.split('-')[-1].strip()
             data['author'] = auth
             if save:
                 with open(Path(f'save/{title}.md'), 'w', encoding='utf-8') as f:
@@ -93,12 +118,8 @@ async def html_with_playwright_onece(
                     f.write(f"## AUTHOR\n\n{data['author']}\n\n")
                     f.write(f"## TIME\n\n{data['time']}\n\n")
                     f.write(f"## CONTENT\n\n{data['content_text']}\n")
-            await context.close()
-            await browser.close()
-        return data
-    except Exception as e:
-        logger.error(f"Playwright抓取失败: {e}")
-        return None
+            result_data.append(data)
+    return result_data
 
 if __name__ == '__main__':
     import asyncio
