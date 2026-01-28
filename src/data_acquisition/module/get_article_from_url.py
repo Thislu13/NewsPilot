@@ -109,7 +109,6 @@ async def fetch_full_article_by_url_one(
 
     if result["success"]:
         soup = BeautifulSoup(html, "lxml")
-        soup = BeautifulSoup(html, "lxml")
 
         # title
         if soup.title and soup.title.string:
