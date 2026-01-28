@@ -20,7 +20,6 @@ DEFAULT_HEADERS = {
 }
 
 
-
 async def fetch_full_article_by_url_one(
     url: str,
     timeout: int = 8,
