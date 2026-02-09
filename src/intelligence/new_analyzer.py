@@ -20,9 +20,11 @@ from google.genai.types import GenerateContentConfig, ThinkingConfig, Tool
 
 from core.news_schemas import NewsItemRefinedSchema
 from src.module.init_client import LLMClientFactory
-from config.prompts import CATEGORY_DAILY_REPORT_PROMPT
+from config.prompts import CATEGORY_DAILY_REPORT_PROMPT, TOTAL_DAILY_REPORT_PROMPT
 from src.storage.repository import StorageRepository
 from src.storage.models import RefinedNews
+from src.intelligence.renderers import DailyReportRenderer, DailyTotalReportRenderer
+from src.module.content_converter import ContentConverter
 
 class NewsAnalyzer:
     def __init__(self, model_name: str = "gemini"):
@@ -43,23 +45,41 @@ class NewsAnalyzer:
             "environment_climate": "环境与气候",
             "health_medicine": "医疗健康"
         }
+        self.renderer = DailyReportRenderer(self.category_map)
+        self.total_renderer = DailyTotalReportRenderer()
+        self.converter = ContentConverter()
 
     async def generate_all_daily_reports(
         self, 
         target_date: Optional[datetime.date] = None, 
-        save_path: Optional[str] = None,
-        time_range: Optional[tuple[datetime, datetime]] = None
+        time_range: Optional[tuple[datetime, datetime]] = None,
+        # 新增细粒度控制参数
+        save_md_list: Optional[List[str]] = "ALL",      # None=不保存, "ALL"=全保存
+        save_html_list: Optional[List[str]] = ["total"],    # None=不保存, "ALL"=全保存
+        save_pdf_list: Optional[List[str]] = "ALL_CATEGORIES",     # None=不保存, "ALL"=全保存
+        md_output_dir: Optional[str] = None,
+        html_output_dir: Optional[str] = None,
+        pdf_output_dir: Optional[str] = None
     ) -> Dict[str, Dict[str, str]]:
         """
-        核心入口
-        :param target_date: 报告归属日期（用于文件名和默认的时间范围 00:00-23:59）
-        :param save_path: 保存路径
-        :param time_range: (start_time, end_time) 自定义抓取时间范围。如果提供，将忽略 target_date 的默认范围。
+        核心入口 (V2 重构版)
+        :param target_date: 报告归属日期
+        :param time_range: (start, end) 时间范围，与 target_date 互斥
+        :param save_md_list: 需要保存 MD 的分类列表 (如 ["policy_regulation", "total"])
+        :param save_html_list: 需要保存 HTML 的分类列表
+        :param save_pdf_list: 需要保存 PDF 的分类列表
         """
+        # 0. 参数归一化与默认值处理
         if not target_date and not time_range:
              target_date = datetime.now().date()
-             
+        
         display_date = target_date if target_date else time_range[1].date()
+        
+        # 兼容旧逻辑：如果只传了 save_path，则将其作为所有格式的默认根目录，且默认开启 MD Output
+        base_dir = os.getcwd()
+        if md_output_dir is None: md_output_dir = base_dir
+        if html_output_dir is None: html_output_dir = base_dir
+        if pdf_output_dir is None: pdf_output_dir = base_dir
         
         print(f"[*] 开始生成 {display_date} 日报，使用模型: {self.model_name}")
         
@@ -70,42 +90,172 @@ class NewsAnalyzer:
             return {}
             
         categorized_news = self._classify_news(news_items)
-        print(f"[*] 新闻分类完成，覆盖 {len([k for k,v in categorized_news.items() if v])} 个领域")
+        valid_categories = [k for k,v in categorized_news.items() if v]
+        print(f"[*] 新闻分类完成，覆盖 {len(valid_categories)} 个领域")
         
         results = {}
         tasks = []
         
-        # 2. 创建并执行生成任务
+        # 2. 并行生成各分领域报告 (必须步骤，无论是否保存)
         for category, items in categorized_news.items():
             if not items:
                 continue
-            
-            # task 直接使用 self.client，无需传递 model_name
             task = self._generate_single_category_content(category, items, display_date)
             tasks.append((category, task))
             
         if not tasks:
             return {}
             
-        # 并行等待
         cat_keys = [t[0] for t in tasks]
         awaitables = [t[1] for t in tasks]
         
-        print(f"[*] 正在调用 LLM 生成 {len(tasks)} 个领域的报告...")
+        print(f"[*] Step 1: 调用 LLM 生成 {len(tasks)} 个分领域报告...")
         analysis_contents = await asyncio.gather(*awaitables)
         
-        # 3. 处理结果
-        for category, content in zip(cat_keys, analysis_contents):
-            md_content = self._construct_md_report(category, content, display_date)
+        # 存储分领域的原始 JSON，供 Total 生成使用
+        domain_json_map = {} 
+
+        # 3. 处理分领域结果 & 文件保存
+        for category, raw_json in zip(cat_keys, analysis_contents):
+            domain_json_map[category] = raw_json
+            
+            # 渲染 MD
+            news_list_for_appendix = categorized_news.get(category, [])
+            md_content = self.renderer.render(category, raw_json, display_date, news_list_for_appendix)
+            
+            # 生成 HTML
+            html_content = self.converter.md_to_html(md_content, full_page=True)
+
+            # 保存逻辑
+            saved_paths = await self._handle_file_saving(
+                category=category,
+                display_date=display_date,
+                md_content=md_content,
+                html_content=html_content,
+                save_md_list=save_md_list,
+                save_html_list=save_html_list,
+                save_pdf_list=save_pdf_list,
+                md_dir=md_output_dir,
+                html_dir=html_output_dir,
+                pdf_dir=pdf_output_dir
+            )
+
             results[category] = {
-                "llm_output": content,
-                "md_content": md_content
+                "llm_output": raw_json,
+                "md_content": md_content,
+                **saved_paths
             }
-            if save_path:
-                self._save_md_file(save_path, display_date, category, md_content)
+
+        # 4. 生成 Total 汇总日报 (Step 2)
+        print(f"[*] Step 2: 正在生成 Total 汇总日报 (基于 {len(domain_json_map)} 个分报告)...")
+        total_raw_json = await self._generate_total_report(domain_json_map, display_date)
+        
+        # 渲染 Total MD (不带新闻附录)
+        total_md = self.total_renderer.render(total_raw_json, display_date)
+        total_html = self.converter.md_to_html(total_md, full_page=True)
+        
+        # 保存 Total
+        total_paths = await self._handle_file_saving(
+            category="total",
+            display_date=display_date,
+            md_content=total_md,
+            html_content=total_html,
+            save_md_list=save_md_list,
+            save_html_list=save_html_list,
+            save_pdf_list=save_pdf_list,
+            md_dir=md_output_dir,
+            html_dir=html_output_dir,
+            pdf_dir=pdf_output_dir
+        )
+        
+        results["total"] = {
+            "llm_output": total_raw_json,
+            "md_content": total_md,
+            **total_paths
+        }
                 
         print(f"[*] 所有报告生成完毕。")
         return results
+
+    async def _handle_file_saving(
+        self, category, display_date, md_content, html_content,
+        save_md_list, save_html_list, save_pdf_list,
+        md_dir, html_dir, pdf_dir
+    ) -> Dict[str, str]:
+        """统一文件保存处理逻辑"""
+        paths = {}
+        
+        # 获取中文文件名 用于文件命名
+        cn_name = self.category_map.get(category, category)
+        if category == "total":
+             cn_name = "0_全领域深度日报_汇总" # 加个前缀让它排第一
+            
+        # MD
+        if self._should_save(category, save_md_list):
+            path = self._build_path(md_dir, display_date, f"{cn_name}.md")
+            self._write_text(path, md_content)
+            paths["md_path"] = path
+
+        # HTML
+        if self._should_save(category, save_html_list):
+            path = self._build_path(html_dir, display_date, f"{cn_name}.html")
+            self._write_text(path, html_content)
+            paths["html_path"] = path
+
+        # PDF
+        if self._should_save(category, save_pdf_list):
+            path = self._build_path(pdf_dir, display_date, f"{cn_name}.pdf")
+            await self.converter.save_pdf(md_content, path)
+            paths["pdf_path"] = path
+            
+        return paths
+
+    def _should_save(self, category: str, rule: Any) -> bool:
+        if not rule: return False
+        if rule == "ALL": return True
+        if rule == "ALL_CATEGORIES" and category != "total": return True
+        if isinstance(rule, list) and (category in rule or "ALL" in rule): return True
+        return False
+
+    def _build_path(self, root: str, date: datetime.date, filename: str) -> str:
+        # 如果路径中包含 'test' (不区分大小写)，则视为测试目录，不自动创建日期子文件夹
+        if 'test' in root.lower().split(os.sep): 
+             full_folder = root
+        else:
+            # 默认保持 YYYY-MM-DD 子目录结构
+            date_folder = date.strftime("%Y-%m-%d")
+            full_folder = os.path.join(root, date_folder)
+            
+        os.makedirs(full_folder, exist_ok=True)
+        return os.path.join(full_folder, filename)
+
+    def _write_text(self, path: str, text: str):
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+            print(f"   [+] Saved: {path}")
+        except Exception as e:
+            print(f"   [!] Failed to save {path}: {e}")
+
+    async def _generate_total_report(self, domain_json_map: Dict[str, str], date: datetime.date) -> str:
+        """生成 Total 汇总报告"""
+        # 拼接 JSON 素材
+        combined_json_str = ""
+        for cat, json_str in domain_json_map.items():
+            cn_cat = self.category_map.get(cat, cat)
+            combined_json_str += f"\n=== {cn_cat} ===\n{json_str}\n"
+
+        system_prompt = TOTAL_DAILY_REPORT_PROMPT["SYSTEM_PROMPT"]
+        user_prompt = TOTAL_DAILY_REPORT_PROMPT["USER_PROMPT_TEMPLATE"].format(
+            date=date.strftime("%Y-%m-%d"),
+            domain_reports_json=combined_json_str
+        )
+        
+        # 复用 _call_llm 进行调用 (只试一次，失败不重试或简单重试)
+        try:
+            return await self._call_llm(system_prompt, user_prompt)
+        except Exception as e:
+            return json.dumps({"error": str(e), "meta": {}})
 
     # ... _fetch_news 和 _classify_news 保持不变 ...
     def _fetch_news(self, target_date: Optional[datetime.date], time_range: Optional[tuple[datetime, datetime]] = None) -> List[RefinedNews]:
@@ -190,123 +340,8 @@ class NewsAnalyzer:
                 print(f"[!] JSON 校验失败 ({attempt+1}/{max_retries})，正在重试: {category}")
                 continue
         
-        # 5. 解析 JSON 并渲染为 Markdown
-        return self._render_json_to_md(raw_output)
-
-    def _render_json_to_md(self, json_text: str) -> str:
-        """
-        [V2] 将 LLM 返回的 JSON 字符串解析并渲染为标准化 Markdown
-        核心逻辑：严格区分事实、反应与研判
-        """
-        # 1. 清洗 JSON 字符串
-        cleaned_text = re.sub(r"^```json\s*", "", json_text.strip(), flags=re.MULTILINE)
-        cleaned_text = re.sub(r"\s*```$", "", cleaned_text, flags=re.MULTILINE)
-        
-        try:
-            data = json.loads(cleaned_text)
-        except json.JSONDecodeError:
-            return f"> ⚠️ 格式解析失败，显示原始输出：\n\n{json_text}"
-            
-        # 2. 渲染 Markdown
-        md_lines = []
-        meta = data.get("meta", {})
-        
-        # 头部
-        md_lines.append("")
-        md_lines.append(f"> 📊 **情报综述** | 覆盖新闻数: {meta.get('news_coverage_count', 'N/A')} | 生成时间: {datetime.now().strftime('%H:%M')}")
-        md_lines.append("")
-        
-        # 每日综述 (Overall Commentary) - New
-        overall = data.get("overall_commentary", "")
-        if overall:
-            md_lines.append("## 📝 重点综述")
-            md_lines.append(f"{overall}\n")
-            md_lines.append("---")
-
-        # A. 核心情报 (Core Events)
-        core_events = data.get("core_events", [])
-        if core_events:
-            md_lines.append("## 🔥 核心情报")
-            for i, event in enumerate(core_events, 1):
-                title = event.get("title", "未命名情报")
-                facts = event.get("facts", {})
-                what_happened = facts.get("what_happened", "")
-                data_points = facts.get("data_points", [])
-                reactions = event.get("reactions", "未观察到显著反应")
-                analysis = event.get("system_analysis", "")
-                sources = event.get("sources", [])
-                
-                # 标题
-                md_lines.append(f"### {i}. {title}")
-                
-                # 事实层
-                md_lines.append(f"{what_happened}")
-                if data_points:
-                    points_str = "、".join([f"`{dp}`" for dp in data_points])
-                    md_lines.append(f"*   **关键数据**: {points_str}")
-                
-                # 来源标注
-                if sources:
-                    md_lines.append(f"*   <small style='color:grey'>来源: {', '.join(sources)}</small>")
-
-                # 反应层
-                md_lines.append("")
-                if reactions and reactions != "未观察到显著反应":
-                     md_lines.append(f"> 📢 **各方反应**: {reactions}")
-                
-                # 研判层 (专家模型研判)
-                outlook = event.get("expert_outlook", {})
-                # 兼容旧字段 system_analysis
-                sys_analysis = event.get("system_analysis", "")
-                
-                if outlook or sys_analysis:
-                     md_lines.append(f"> 🧠 **专家模型研判**")
-                     
-                     if sys_analysis: # Fallback for old data
-                         md_lines.append(f"> *   **分析**: {sys_analysis}")
-                     
-                     if outlook:
-                         eval_text = outlook.get("evaluation", "")
-                         pred_text = outlook.get("prediction", "")
-                         counter_text = outlook.get("counterfactual_analysis", "")
-                         
-                         if eval_text:
-                            md_lines.append(f"> *   **评价**: {eval_text}")
-                         if pred_text:
-                            md_lines.append(f"> *   **预测**: {pred_text}")
-                         if counter_text:
-                            md_lines.append(f"> *   **反向推演**: {counter_text}")
-
-                md_lines.append("---")
-        
-        # B. 行业扫描 (Industry Scan)
-        industry_scan = data.get("industry_scan", [])
-        if industry_scan:
-            md_lines.append("## 📰 行业扫描")
-            for item in industry_scan:
-                sub_topic = item.get("sub_topic", "通用")
-                briefs = item.get("briefs", [])
-                
-                md_lines.append(f"**🔹 {sub_topic}**")
-                if isinstance(briefs, list):
-                    for brief in briefs:
-                        md_lines.append(f"- {brief}")
-                else:
-                    md_lines.append(f"- {briefs}")
-                md_lines.append("")
-        
-        # C. 市场监测 (Market Monitor)
-        monitor = data.get("market_monitor", {})
-        if monitor:
-            md_lines.append("## 📉 市场监测")
-            observed = monitor.get("observed_changes", "未录得显著波动")
-            signal = monitor.get("trend_signal", "观望")
-            
-            md_lines.append(f"- **市场变动**: {observed}")
-            md_lines.append(f"- **系统信号**: `{signal}`")
-            md_lines.append("")
-
-        return "\n".join(md_lines)
+        # 5. 直接返回原始 JSON 字符串，由 Renderer 处理渲染
+        return raw_output
 
     async def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
         """底层 LLM 调用路由"""
@@ -357,26 +392,9 @@ class NewsAnalyzer:
             except Exception as e:
                 return f"LLM Error ({self.model_name}): {str(e)}"
 
-    def _construct_md_report(self, category: str, body_content: str, date: datetime.date) -> str:
-        """[Function MD] 构造 Markdown"""
-        cn_name = self.category_map.get(category, category)
-        header = f"# 📅 {cn_name} 行业深度日报\n"
-        meta = f"> 日期: {date.strftime('%Y-%m-%d')} | 来源: NewsPilot Intelligence\n\n"
-        return f"{header}{meta}{body_content}"
-
-    def _save_md_file(self, base_path: str, date: datetime.date, category: str, content: str):
-        """保存文件"""
-        date_subfolder = date.strftime("%Y-%m-%d")
-        folder = os.path.join(base_path, date_subfolder)
-        os.makedirs(folder, exist_ok=True)
-        filename = f"{category}.md"
-        full_path = os.path.join(folder, filename)
-        try:
-            with open(full_path, "w", encoding="utf-8") as f:
-                f.write(content)
-            print(f"   [+] 已保存: {full_path}")
-        except Exception as e:
-            print(f"   [!] 保存失败: {e}")
+    async def _save_report_files(self, base_path: str, date: datetime.date, category: str, md_content: str) -> str:
+        """[Deprecated] 旧版保存逻辑，已由 _handle_file_saving 接管"""
+        pass
 
 if __name__ == "__main__":
     async def main():
@@ -385,13 +403,19 @@ if __name__ == "__main__":
         analyzer = NewsAnalyzer(model_name=MODEL)
 
         # 模式1: 聚合分析 (生成一份包含 1月1日-1月30日 信息的综合报告)
+        # 为测试使用 2026-01-30 的数据
         start_time = datetime(2026, 1, 28, 0, 0, 0)
         end_time = datetime(2026, 1, 30, 23, 59, 59)
         
         print(f"--- 模式1: 启动长周期聚合分析 ({start_time.date()} ~ {end_time.date()}) ---")
         await analyzer.generate_all_daily_reports(
             time_range=(start_time, end_time),
-            save_path=SAVE_DIR
+            md_output_dir=r"E:\code\NewsPilot\data\daily_reports\test\markdown",
+            html_output_dir=r"E:\code\NewsPilot\data\daily_reports\test\html",
+            pdf_output_dir=r"E:\code\NewsPilot\data\daily_reports\test\pdf",
+            save_md_list="ALL",
+            save_html_list=["total"],
+            save_pdf_list="ALL_CATEGORIES"
         )
 
         # 模式2 (可选): 逐日回溯 (每天生成一份日报)

@@ -22,6 +22,7 @@ pydantic>=2.0.0
 python-dateutil>=2.8.2
 tqdm>=4.66.0
 feedparser>=6.0.10
+markdown>=3.5.0
 
 
 # LLM clients
