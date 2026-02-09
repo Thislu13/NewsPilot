@@ -2,7 +2,6 @@
 #数据文件
 tools/
 .history/
-data/
 #密钥文件
 config/keys.py
 #用户画像
