@@ -2,6 +2,7 @@ import markdown
 import asyncio
 from playwright.async_api import async_playwright
 import os
+import base64
 
 class ContentConverter:
     def __init__(self):
@@ -35,20 +36,72 @@ class ContentConverter:
                 pre { padding: 16px; overflow: auto; font-size: 85%; line-height: 1.45; background-color: #f6f8fa; border-radius: 3px; }
                 pre code { background-color: transparent; }
                 hr { height: .25em; padding: 0; margin: 24px 0; background-color: #e1e4e8; border: 0; }
+                
+                /* 打赏区域样式 - 美化版 */
+                .donation-container {
+                    margin-top: 50px;
+                    padding: 30px;
+                    background: linear-gradient(135deg, #f6f8fa 0%, #ffffff 100%);
+                    border-top: 1px solid #eaecef;
+                    text-align: center;
+                    border-radius: 12px;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+                }
+                .donation-title {
+                    font-size: 1.2em;
+                    font-weight: 600;
+                    color: #586069;
+                    margin-bottom: 20px;
+                }
+                .donation-img {
+                    width: 200px;
+                    height: 200px;
+                    border-radius: 12px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                    transition: transform 0.3s ease;
+                }
+                .donation-img:hover {
+                    transform: scale(1.05);
+                }
+                .donation-desc {
+                    margin-top: 15px;
+                    font-size: 0.9em;
+                    color: #6a737d;
+                }
             </style>
         """
 
-    def md_to_html(self, md_content: str, full_page: bool = True) -> str:
+    def md_to_html(self, md_content: str, full_page: bool = True, footer_image_path: str = None) -> str:
         """
         将 Markdown 转换为 HTML
         :param md_content: Markdown 文本
-        :param full_page: 是否包含完整的 <html><body> 结构 (如果为 False 则只返回片段，适合嵌入)
+        :param full_page: 是否包含完整的 <html><body> 结构
+        :param footer_image_path: 可选，底部附加图片的绝对路径（如打赏码）
         :return: HTML 字符串
         """
         html_body = markdown.markdown(
             md_content, 
             extensions=['tables', 'fenced_code', 'nl2br', 'sane_lists']
         )
+        
+        # 插入底部图片逻辑
+        if footer_image_path and os.path.exists(footer_image_path):
+            try:
+                with open(footer_image_path, "rb") as image_file:
+                    encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+                    ext = footer_image_path.split('.')[-1].lower()
+                    mime_type = f"image/{ext}" if ext != 'jpg' else "image/jpeg"
+                    
+                    footer_html = f"""
+                    <div class="donation-container">
+                        <div class="donation-title">🤝 感谢支持开源项目</div>
+                        <img src="data:{mime_type};base64,{encoded_string}" alt="Support" class="donation-img">
+                        <div class="donation-desc">如果不介意，可以请作者喝杯咖啡 ☕</div>
+                    </div>
+                    """
+                    html_body += footer_html
+            except Exception as e:
+                print(f"[!] Warning: Failed to embed footer image: {e}")
         
         if not full_page:
             return html_body

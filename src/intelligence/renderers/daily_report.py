@@ -164,6 +164,31 @@ class DailyReportRenderer:
             md_lines.append(f"- **系统信号**: `{signal}`")
             md_lines.append("")
 
+        # D. 套利与投资机会 (Investment Opportunities)
+        opportunities = data.get("investment_opportunities", [])
+        if opportunities:
+            md_lines.append("## 💰 套利与投资机会")
+            for opp in opportunities:
+                opp_type = opp.get("opportunity_type", "综合机会")
+                desc = opp.get("description", "")
+                beneficiaries = opp.get("beneficiaries", [])
+                risk = opp.get("risk_factor", "")
+                
+                md_lines.append(f"### {opp_type}")
+                md_lines.append(f"{desc}")
+                
+                if beneficiaries:
+                    # check if string or list
+                    if isinstance(beneficiaries, list):
+                        ben_str = "、".join([f"`{b}`" for b in beneficiaries])
+                    else:
+                        ben_str = str(beneficiaries)
+                    md_lines.append(f"*   **受益方**: {ben_str}")
+                    
+                if risk:
+                    md_lines.append(f"*   **潜在风险**: {risk}")
+                md_lines.append("")
+
         return "\n".join(md_lines)
 
     def _render_single_event(self, md_lines: List[str], index: int, event: Dict[str, Any]):

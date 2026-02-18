@@ -160,7 +160,15 @@ CATEGORY_DAILY_REPORT_PROMPT = {
         "market_monitor": {{ // 市场监测 (仅基于事实)
             "observed_changes": "今日观察到的明确市场变动（如股价异动、大宗商品价格突变），若无显著波动明确说明 '未录得显著波动'。",
             "trend_signal": "基于今日信息判定的短期趋势信号 (中性/偏紧/宽松/观望)"
-        }}
+        }},
+        "investment_opportunities": [ // 套利与投资机会 (新增)
+             {{
+                 "opportunity_type": "类型 (如：跨市场套利/政策红利/技术替代/估值修复)",
+                 "description": "具体机会描述 (100字左右)，需明确指出获利逻辑与潜在红利",
+                 "beneficiaries": ["受益方1", "受益方2"], // 潜在受益的行业、板块或具体公司类型
+                 "risk_factor": "风险点 (简述)"
+             }}
+        ]
     }}
     """,
 
@@ -225,7 +233,15 @@ CATEGORY_DAILY_REPORT_PROMPT = {
         "market_monitor": {{ // 市场监测 (仅基于事实)
             "observed_changes": "今日观察到的明确市场变动（如股价异动、大宗商品价格突变），若无显著波动明确说明 '未录得显著波动'。",
             "trend_signal": "基于今日信息判定的短期趋势信号 (中性/偏紧/宽松/观望)"
-        }}
+        }},
+        "investment_opportunities": [ // 套利与投资机会 (新增)
+             {{
+                 "opportunity_type": "类型 (如：跨市场套利/政策红利/技术替代/估值修复)",
+                 "description": "具体机会描述 (100字左右)，需明确指出获利逻辑与潜在红利",
+                 "beneficiaries": ["受益方1", "受益方2"], // 潜在受益的行业、板块或具体公司类型
+                 "risk_factor": "风险点 (简述)"
+             }}
+        ]
     }}
     请严格遵循上述原则，输出 JSON：
     """,
@@ -365,6 +381,13 @@ TOTAL_DAILY_REPORT_PROMPT = {
                 "description": "具体风险描述及潜在影响范围",
                 "severity": "高/中/低"
             }}
+        ],
+        "investment_arbitrage_map": [ // 全局套利与红利地图 (新增)
+             {{
+                 "logic_chain": "机会逻辑 (如：地缘冲突 -> 能源价格差 -> 航运股受益)",
+                 "sector_focus": ["相关板块1", "相关板块2"],
+                 "actionable_insight": "具体的投资或套利方向建议，点明潜在红利"
+             }}
         ]
     }}
     """,
@@ -389,6 +412,7 @@ TOTAL_DAILY_REPORT_PROMPT = {
     2. 保持高信息密度，不要生成“请参考分报告”之类的废话，必须直接陈述情报。
     3. 忽略重复琐碎的信息，只保留决定性的情报。
     4. **global_industry_scan** 字段：请将输入素材中各领域的 `industry_scan` 内容进行聚合与精选，保留约 20-50 条最有价值的行业动态简报。
+    5. **investment_arbitrage_map** 字段：请综合跨领域的动向，识别潜在的套利机会与投资红利，分析各相关板块的受益逻辑。
     """
 }
 

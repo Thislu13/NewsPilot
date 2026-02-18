@@ -152,7 +152,15 @@ class NewsAnalyzer:
         
         # 渲染 Total MD (不带新闻附录)
         total_md = self.total_renderer.render(total_raw_json, display_date)
-        total_html = self.converter.md_to_html(total_md, full_page=True)
+        
+        # 准备打赏码路径 (仅在 Total 报告中添加)
+        pay_img_path = os.path.join(os.path.dirname(__file__), 'renderers', 'pay.png')
+        
+        total_html = self.converter.md_to_html(
+            total_md, 
+            full_page=True, 
+            footer_image_path=pay_img_path
+        )
         
         # 保存 Total
         total_paths = await self._handle_file_saving(

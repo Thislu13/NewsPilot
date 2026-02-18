@@ -2,7 +2,7 @@
 # Author: WangQiushuo 185886867@qq.com
 # Date: 2025-12-23 21:59:45
 # LastEditors: WangQiushuo 185886867@qq.com
-# LastEditTime: 2026-02-07 23:11:44
+# LastEditTime: 2026-02-14 01:41:53
 # FilePath: \NewsPilot\src\data_acquisition\fetchers\rsshub_fetcher.py
 # Description: 
 # 
@@ -69,15 +69,31 @@ class RSSHubFetcher(BaseFetcher):
             "options":[
             ]  
         },
+
         # https://docs.rsshub.app/routes/ftchinese
         # FT中文网
         # description 字段基本基本是全文
-        
         'ftchinese': {
             'url':'/ftchinese/simplified',
             "options":[
             ]  
         },
+        # https://docs.rsshub.app/routes/10jqka
+        # 同花顺
+        '10jqka': {
+            'url':'/10jqka/realtimenews',
+            "options":[
+            ]  
+        },
+
+        # https://docs.rsshub.app/routes/wallstreetcn
+        #华尔街见闻
+        'wallstreetcn': {
+            'url':'/wallstreetcn',
+            "options":[
+                '/live'
+            ]  
+        }
     }
 
     @property
@@ -132,6 +148,8 @@ class RSSHubFetcher(BaseFetcher):
             "cls": self._fetch_cls_rss,
             "bbc": self._fetch_bbc_rss,
             "ftchinese": self._fetch_ftchinese_rss,
+            "10jqka": self._fetch_10jqka_rss,
+            "wallstreetcn": self._fetch_wallstreetcn_rss,
         }
 
         enabled_sources = [k for k in self.rss_config.keys() if k in entry_fetchers]
@@ -317,6 +335,62 @@ class RSSHubFetcher(BaseFetcher):
 
         return articles
 
+    async def _fetch_10jqka_rss(self) -> List[Dict[str, Any]]:
+        items_list = await self._get_items_list("10jqka")
+        articles: List[Dict[str, Any]] = []
+        for item in items_list:
+            published_at = self._parse_published_rfc822(item.get("published"))
+
+            articles.append(
+                {
+                    'source_id': item.get("id", ""),
+                    
+                    "source_channel": "10jqka",
+                    "url": item.get("link"),
+
+                    "publishedAt": published_at,
+                    "fetchedAt": datetime.now(timezone.utc),
+
+                    "title": item.get("title"),
+                    "description": item.get("summary"),
+                    "body": item.get("summary"),
+
+                    "author": item.get("author"),
+                    "categories" : [],
+                    "extra_data": {"rsshub": item}
+                }
+            )
+
+        return articles
+
+    async def _fetch_wallstreetcn_rss(self) -> List[Dict[str, Any]]:
+        items_list = await self._get_items_list("wallstreetcn")
+        articles: List[Dict[str, Any]] = []
+        for item in items_list:
+            published_at = self._parse_published_rfc822(item.get("published"))
+
+            articles.append(
+                {
+                    'source_id': item.get("id", ""),
+                    
+                    "source_channel": "Wallstreetcn",
+                    "url": item.get("link"),
+
+                    "publishedAt": published_at,
+                    "fetchedAt": datetime.now(timezone.utc),
+
+                    "title": item.get("title"),
+                    "description": item.get("summary"),
+                    "body": item.get("summary"),
+
+                    "author": item.get("author"),
+                    "categories" : [],
+                    "extra_data": {"rsshub": item}
+                }
+            )
+
+        return articles
+
     async def _fetch_ftchinese_rss(self) -> List[Dict[str, Any]]:
         items_list = await self._get_items_list("ftchinese")
         articles: List[Dict[str, Any]] = []
@@ -343,6 +417,7 @@ class RSSHubFetcher(BaseFetcher):
                     "extra_data": {"rsshub": item}
                 }
             )
+
         # for i in range(5):
         #     item = items_list[i]
         #     print(f"Item {i+1}:")

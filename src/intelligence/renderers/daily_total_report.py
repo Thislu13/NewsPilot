@@ -108,6 +108,24 @@ class DailyTotalReportRenderer:
                  lines.append(f"| {rtype} | {desc} | {severity} |")
              lines.append("")
 
+        # 5. Global Investment & Arbitrage Map
+        inv_map = data.get("investment_arbitrage_map", [])
+        if inv_map:
+            lines.append("## 💎 全局套利与红利地图")
+            lines.append("")
+            
+            for item in inv_map:
+                logic = item.get("logic_chain", "")
+                sectors = item.get("sector_focus", [])
+                insight = item.get("actionable_insight", "")
+                
+                lines.append(f"### 🔗 逻辑链: {logic}")
+                if sectors:
+                     sec_str = "、".join([f"`{s}`" for s in sectors])
+                     lines.append(f"- **🎯 关注板块**: {sec_str}")
+                lines.append(f"- **💡 投资建议**: {insight}")
+                lines.append("")
+
         # --- Footer ---
         lines.append("---")
         lines.append("### ℹ️ 关于本报告")
