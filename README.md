@@ -75,6 +75,7 @@ docker-compose -f config/docker/docker-compose_rsshub_win.yml up -d
 
 | 模式 | 命令 | 说明 |
 | :--- | :--- | :--- |
+| **统一入口** | `python -m src.workflows.run_service` | 读取 `config/workflow_service.json`，按配置启动 `news` 或 `zhihu_analysis` 服务。 |
 | **全自动服务** | `python -m src.workflows.run_news_service` | **[推荐]** 生产模式。后台驻留，每120分钟轮询采集、清洗入库。 |
 | **通用日报** | `python -m src.workflows.run_daily_report` | 手动/定时触发。分析当日新闻，生成通用行业日报。 |
 | **个性化洞察** | `python -m src.workflows.main_pipeline` | 读取 `user_profile.json`，生成针对个人的投资与行动建议。 |

@@ -171,3 +171,34 @@ class SupportingDocument(Base):
 
     def __repr__(self):
         return f"<SupportingDocument(unique_id={self.unique_id}, title={self.title})>"
+
+
+class ZhihuRawPost(Base):
+    """
+    知乎专用原始内容表（抓取结果）。
+    与新闻主流程隔离，用于后续定向语义分析。
+    """
+    __tablename__ = 'zhihu_raw_posts'
+
+    unique_id = Column(String(36), primary_key=True)
+    source_id = Column(Text, nullable=True)
+
+    source_channel = Column(Text, nullable=False, default='Zhihu')
+    source_url = Column(Text, unique=True, nullable=False, index=True)
+
+    author = Column(Text, nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=False)
+    fetched_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    title = Column(Text, nullable=False)
+    body = Column(Text, nullable=True)
+
+    categories = Column(JSON, nullable=True)
+    attachments = Column(JSON, nullable=True)
+    extra_data = Column(JSON, nullable=True)
+
+    # 处理状态: pending / completed
+    status = Column(String(20), default='pending', index=True)
+
+    def __repr__(self):
+        return f"<ZhihuRawPost(unique_id={self.unique_id}, title={self.title})>"

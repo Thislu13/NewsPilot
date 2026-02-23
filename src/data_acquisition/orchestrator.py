@@ -37,7 +37,7 @@ class NewsAcquisitionService:
 
         self.fetchers = {
             "newsapi": NewsAPIFetcher(api_key=keys.newsapi_api),
-            "rsshub": RSSHubFetcher(),
+            "rsshub": RSSHubFetcher(choices=["reuters", "bloomberg", "eastmoney", "cls", "bbc", "ftchinese", "10jqka", "wallstreetcn"]),
             # "reuters": ReutersFetcher(...),
         }
 

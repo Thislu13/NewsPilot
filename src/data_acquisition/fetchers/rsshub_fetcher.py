@@ -2,7 +2,7 @@
 # Author: WangQiushuo 185886867@qq.com
 # Date: 2025-12-23 21:59:45
 # LastEditors: WangQiushuo 185886867@qq.com
-# LastEditTime: 2026-02-14 01:41:53
+# LastEditTime: 2026-02-23 20:48:37
 # FilePath: \NewsPilot\src\data_acquisition\fetchers\rsshub_fetcher.py
 # Description: 
 # 
@@ -13,12 +13,13 @@ from typing import List, Dict, Any, Optional, Callable, Awaitable
 import asyncio
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-
+from pathlib import Path
 import aiohttp
 import feedparser
 
 
 from src.data_acquisition.fetchers.base_fetcher import BaseFetcher
+from src.data_acquisition.module.get_attachment import extract_attachment_urls_from_html
 from src.module.tools import generate_uuid7
 from core.news_schemas import NewsItemRawSchema, Attachment
 
@@ -92,7 +93,20 @@ class RSSHubFetcher(BaseFetcher):
             'url':'/wallstreetcn',
             "options":[
                 '/live'
-            ]  
+            ]
+        },
+        # https://docs.rsshub.app/routes/zhihu
+        # 知乎
+        # 用户动态（activities）示例：
+        # http://localhost:1200/zhihu/people/activities/mr-dang-77
+        'zhihu_people': {
+            'url':'/zhihu',
+            "options":[
+                '/people/activities/mr-dang-77',
+                # '/posts/people/mr-dang-77',  # 用户发布的文章
+                # '/answers/people/mr-dang-77',  # 用户的回答
+                # '/people/pins/mr-dang-77',  # 用户的想法
+            ]
         }
     }
 
@@ -109,9 +123,11 @@ class RSSHubFetcher(BaseFetcher):
         rss_url: str="http://localhost:1200",
         rss_config: Optional[Dict[str, Any]] = RSS_CONFIG,
         choices: List = None,
+        attachment_dir: Optional[Path] = None,
     ):
         self.rss_url = rss_url
         self.rss_config = rss_config or {}
+        self.attachment_dir = Path(attachment_dir) if attachment_dir else None
         if choices:
             self.rss_config = {k:v for k,v in self.rss_config.items() if k in choices}
 
@@ -142,6 +158,7 @@ class RSSHubFetcher(BaseFetcher):
         - 单个入口内部按 URL 串行执行（避免反扒/降压）
         """
         entry_fetchers: Dict[str, Callable[[], Awaitable[List[Dict[str, Any]]]]] = {
+        # ['reuters', 'bloomberg', 'eastmoney', 'cls', 'bbc', 'ftchinese', '10jqka', 'wallstreetcn', 'zhihu_people']
             "reuters": self._fetch_reuters_rss,
             "bloomberg": self._fetch_bloomberg_rss,
             "eastmoney": self._fetch_eastmoney_rss,
@@ -150,6 +167,7 @@ class RSSHubFetcher(BaseFetcher):
             "ftchinese": self._fetch_ftchinese_rss,
             "10jqka": self._fetch_10jqka_rss,
             "wallstreetcn": self._fetch_wallstreetcn_rss,
+            "zhihu_people": self._fetch_zhihu_rss,
         }
 
         enabled_sources = [k for k in self.rss_config.keys() if k in entry_fetchers]
@@ -177,13 +195,17 @@ class RSSHubFetcher(BaseFetcher):
 
         items_list = await self._get_items_list("reuters")
         articles: List[Dict[str, Any]] = []
-        
+
         for item in items_list:
             published_at = self._parse_published_rfc822(item.get("published"))
 
             # 处理tag
             tags = item.get("tags", [])
             categories = [tag.get("term") for tag in tags if tag.get("term")]
+
+            # 从HTML中提取附件URL（如果有）
+            description_html = item.get("summary") or ""
+            body_text, attachment_dicts = extract_attachment_urls_from_html(description_html)
 
             articles.append(
                 {
@@ -196,15 +218,16 @@ class RSSHubFetcher(BaseFetcher):
                     "fetchedAt": datetime.now(timezone.utc),
 
                     "title": item.get("title"),
-                    "description": item.get("summary"),
-                    "body": item.get("summary"),
+                    "description": description_html,
+                    "body": body_text,
 
                     "author": item.get("author"),
                     "categories" : categories,
+                    "attachments": attachment_dicts,
                     "extra_data": {"rsshub": item}
                 }
             )
-        
+
         return articles
 
 
@@ -219,10 +242,14 @@ class RSSHubFetcher(BaseFetcher):
         for item in items_list:
             published_at = self._parse_published_rfc822(item.get("published"))
 
+            # 从HTML中提取附件URL（如果有）
+            description_html = item.get("summary") or ""
+            body_text, attachment_dicts = extract_attachment_urls_from_html(description_html)
+
             articles.append(
                 {
                     'source_id': item.get("id", ""),
-                    
+
                     "source_channel": "Bloomberg",
                     "url": item.get("link"),
 
@@ -230,36 +257,41 @@ class RSSHubFetcher(BaseFetcher):
                     "fetchedAt": datetime.now(timezone.utc),
 
                     "title": item.get("title"),
-                    "description": item.get("summary"),
-                    "body": item.get("summary"),
+                    "description": description_html,
+                    "body": body_text,
 
                     "author": item.get("author"),
                     "categories" : [],
+                    "attachments": attachment_dicts,
                     "extra_data": {"rsshub": item}
                 }
             )
 
-        
+
         return articles
 
     async def _fetch_eastmoney_rss(self) -> List[Dict[str, Any]]:
-        
+
         items_list = await self._get_items_list("eastmoney")
         articles: List[Dict[str, Any]] = []
-        
+
         for item in items_list:
             published_at = self._parse_published_rfc822(item.get("published"))
+
+            # 从HTML中提取附件URL（如果有）
+            description_html = item.get("summary") or ""
+            body_text, attachment_dicts = extract_attachment_urls_from_html(description_html)
 
             articles.append(
                 {
                     'source_id': item.get("link", ""),
-                    
+
                     "source_channel": "Eastmoney",
                     "url": item.get("link"),
 
                     "title": item.get("title"),
-                    "description": item.get("summary"),
-                    "body": item.get("summary"),
+                    "description": description_html,
+                    "body": body_text,
 
                     "publishedAt": published_at,
                     "fetchedAt": datetime.now(timezone.utc),
@@ -267,7 +299,7 @@ class RSSHubFetcher(BaseFetcher):
                     "author": item.get("author"),
                     "categories" : [],
 
-                    "attachments": [item.get("link")],
+                    "attachments": [item.get("link")] + attachment_dicts,
                     "extra_data": {"rsshub": item}
                 }
             )
@@ -277,18 +309,22 @@ class RSSHubFetcher(BaseFetcher):
     async def _fetch_cls_rss(self) -> List[Dict[str, Any]]:
         items_list = await self._get_items_list("cls")
         articles: List[Dict[str, Any]] = []
-        
+
         for item in items_list:
             published_at = self._parse_published_rfc822(item.get("published"))
-            
+
             # 处理tag
             tags = item.get("tags", [])
             categories = [tag.get("term") for tag in tags if tag.get("term")]
 
+            # CLS特殊处理：从HTML中提取附件URL（description字段可能包含HTML）
+            description_html = item.get("summary") or ""
+            body_text, attachment_dicts = extract_attachment_urls_from_html(description_html)
+
             articles.append(
                 {
                     'source_id': item.get("id", ""),
-                    
+
                     "source_channel": "CLS",
                     "url": item.get("link"),
 
@@ -296,12 +332,13 @@ class RSSHubFetcher(BaseFetcher):
                     "fetchedAt": datetime.now(timezone.utc),
 
                     "title": item.get("title"),
-                    "description": item.get("summary"),
-                    "body": item.get("summary"),
+                    "description": description_html,
+                    "body": body_text,
 
                     "author": item.get("author"),
                     "categories" : categories,
-                    "extra_data": {"rsshub": item}
+                    "attachments": attachment_dicts,
+                    "extra_data": {"rsshub": item, "description_html_raw": description_html}
                 }
             )
 
@@ -313,10 +350,14 @@ class RSSHubFetcher(BaseFetcher):
         for item in items_list:
             published_at = self._parse_published_rfc822(item.get("published"))
 
+            # 从HTML中提取附件URL（如果有）
+            description_html = item.get("summary") or ""
+            body_text, attachment_dicts = extract_attachment_urls_from_html(description_html)
+
             articles.append(
                 {
                     'source_id': item.get("id", ""),
-                    
+
                     "source_channel": "BBC",
                     "url": item.get("link"),
 
@@ -324,11 +365,12 @@ class RSSHubFetcher(BaseFetcher):
                     "fetchedAt": datetime.now(timezone.utc),
 
                     "title": item.get("title"),
-                    "description": item.get("summary"),
-                    "body": item.get("summary"),
+                    "description": description_html,
+                    "body": body_text,
 
                     "author": item.get("author"),
                     "categories" : [],
+                    "attachments": attachment_dicts,
                     "extra_data": {"rsshub": item}
                 }
             )
@@ -341,10 +383,14 @@ class RSSHubFetcher(BaseFetcher):
         for item in items_list:
             published_at = self._parse_published_rfc822(item.get("published"))
 
+            # 从HTML中提取附件URL（如果有）
+            description_html = item.get("summary") or ""
+            body_text, attachment_dicts = extract_attachment_urls_from_html(description_html)
+
             articles.append(
                 {
                     'source_id': item.get("id", ""),
-                    
+
                     "source_channel": "10jqka",
                     "url": item.get("link"),
 
@@ -352,11 +398,12 @@ class RSSHubFetcher(BaseFetcher):
                     "fetchedAt": datetime.now(timezone.utc),
 
                     "title": item.get("title"),
-                    "description": item.get("summary"),
-                    "body": item.get("summary"),
+                    "description": description_html,
+                    "body": body_text,
 
                     "author": item.get("author"),
                     "categories" : [],
+                    "attachments": attachment_dicts,
                     "extra_data": {"rsshub": item}
                 }
             )
@@ -369,10 +416,14 @@ class RSSHubFetcher(BaseFetcher):
         for item in items_list:
             published_at = self._parse_published_rfc822(item.get("published"))
 
+            # 从HTML中提取附件URL（如果有）
+            description_html = item.get("summary") or ""
+            body_text, attachment_dicts = extract_attachment_urls_from_html(description_html)
+
             articles.append(
                 {
                     'source_id': item.get("id", ""),
-                    
+
                     "source_channel": "Wallstreetcn",
                     "url": item.get("link"),
 
@@ -380,11 +431,12 @@ class RSSHubFetcher(BaseFetcher):
                     "fetchedAt": datetime.now(timezone.utc),
 
                     "title": item.get("title"),
-                    "description": item.get("summary"),
-                    "body": item.get("summary"),
+                    "description": description_html,
+                    "body": body_text,
 
                     "author": item.get("author"),
                     "categories" : [],
+                    "attachments": attachment_dicts,
                     "extra_data": {"rsshub": item}
                 }
             )
@@ -398,10 +450,14 @@ class RSSHubFetcher(BaseFetcher):
         for item in items_list:
             published_at = self._parse_published_rfc822(item.get("published"))
 
+            # FTChinese特殊处理：从HTML中提取附件URL（description字段可能包含HTML）
+            description_html = item.get("summary") or ""
+            body_text, attachment_dicts = extract_attachment_urls_from_html(description_html)
+
             articles.append(
                 {
                     'source_id': item.get("id", ""),
-                    
+
                     "source_channel": "FTChinese",
                     "url": item.get("link"),
 
@@ -409,12 +465,13 @@ class RSSHubFetcher(BaseFetcher):
                     "fetchedAt": datetime.now(timezone.utc),
 
                     "title": item.get("title"),
-                    "description": item.get("summary"),
-                    "body": item.get("summary"),
+                    "description": description_html,
+                    "body": body_text,
 
                     "author": item.get("author"),
                     "categories" : [],
-                    "extra_data": {"rsshub": item}
+                    "attachments": attachment_dicts,
+                    "extra_data": {"rsshub": item, "description_html_raw": description_html}
                 }
             )
 
@@ -427,7 +484,45 @@ class RSSHubFetcher(BaseFetcher):
 
         return articles
 
-    
+    async def _fetch_zhihu_rss(self) -> List[Dict[str, Any]]:
+        """获取知乎RSS数据，包含HTML解析和附件提取"""
+        items_list = await self._get_items_list("zhihu_people")
+        articles: List[Dict[str, Any]] = []
+
+        for item in items_list:
+            published_at = self._parse_published_rfc822(item.get("published"))
+
+            # 处理tag
+            tags = item.get("tags", [])
+            categories = [tag.get("term") for tag in tags if tag.get("term")]
+
+            # 知乎特殊处理：从HTML中提取附件URL
+            description_html = item.get("summary") or item.get("description") or ""
+            body_text, attachment_dicts = extract_attachment_urls_from_html(description_html)
+
+            articles.append(
+                {
+                    'source_id': item.get("id", ""),
+
+                    "source_channel": "Zhihu",
+                    "url": item.get("link"),
+
+                    "publishedAt": published_at,
+                    "fetchedAt": datetime.now(timezone.utc),
+
+                    "title": item.get("title"),
+                    "description": description_html,
+                    "body": body_text,
+
+                    "author": item.get("author"),
+                    "categories": categories,
+                    "attachments": attachment_dicts,
+                    "extra_data": {"rsshub": item, "description_html_raw": description_html}
+                }
+            )
+
+        return articles
+
     async def fetch_rss_items(
         self,
         rss_url: str,
@@ -618,6 +713,17 @@ class RSSHubFetcher(BaseFetcher):
             if normalized:
                 normalized_list.append(normalized)
 
+        # 如果设置了attachment_dir，则下载附件
+        if self.attachment_dir is not None:
+            from src.data_acquisition.module.get_attachment import enrich_attachment
+            normalized_list = await enrich_attachment(
+                normalized_list=normalized_list,
+                download_root=self.attachment_dir,
+                prefix="rsshub",
+                replace_with_placeholder=False  # 已在extract_attachment_urls_from_html中替换
+            )
+
+        # enrich_full_content(normalized_list)
         return normalized_list
 
 if __name__ == "__main__":

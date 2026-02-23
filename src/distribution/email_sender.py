@@ -15,22 +15,32 @@ except ImportError:
 def send_daily_report_email(
     subject: str,
     html_body_path: Optional[str] = None,
-    attachment_paths: Optional[List[str]] = None
+    attachment_paths: Optional[List[str]] = None,
+    service_name: Optional[str] = None  # 新增参数
 ):
     """
     发送日报邮件
     :param subject: 邮件主题
     :param html_body_path: 作为邮件正文的 HTML 文件路径
     :param attachment_paths: 需要作为附件发送的文件路径列表 (PDF等)
+    :param service_name: 服务名称（如 'zhihu_analysis', 'daily_report'），用于选择特定收件人
     """
     smtp_server = EMAIL_CONFIG.get("SMTP_SERVER")
     smtp_port = EMAIL_CONFIG.get("SMTP_PORT", 465)
     sender_email = EMAIL_CONFIG.get("SENDER_EMAIL")
     sender_password = EMAIL_CONFIG.get("SENDER_PASSWORD")
-    receiver_emails = EMAIL_CONFIG.get("RECEIVER_EMAILS", [])
+
+    # 根据service_name选择收件人
+    if service_name and "SERVICE_RECEIVERS" in EMAIL_CONFIG:
+        receiver_emails = EMAIL_CONFIG["SERVICE_RECEIVERS"].get(
+            service_name,
+            EMAIL_CONFIG.get("RECEIVER_EMAILS", [])  # 回退到默认
+        )
+    else:
+        receiver_emails = EMAIL_CONFIG.get("RECEIVER_EMAILS", [])
 
     if not sender_email or not sender_password or not receiver_emails:
-        print("⚠️ 邮件配置不完整 (src/distribution/email_config.py)，跳过邮件发送。")
+        print(f"⚠️ 邮件配置不完整 (service: {service_name})，跳过邮件发送。")
         return
 
     # 构建邮件

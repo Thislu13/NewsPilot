@@ -1,0 +1,12 @@
+{
+  "service": "zhihu_analysis",
+  "fetch_interval": 7200,
+  "process_interval": 60,
+  "batch_size": 10,
+  "model_name": "gemini",
+  "markdown_output_dir": "data/zhihu_analysis_md",
+  "enable_vision": true,
+  "vision_model": "qwen-vl-plus",
+  "enable_email": true,
+  "email_on_first_run": false
+}

@@ -46,7 +46,7 @@ class DaemonOrchestrator:
         self.repo = StorageRepository()
 
         # 初始化服务组件
-        self.acquisition_service = NewsAcquisitionService(sources=None)  
+        self.acquisition_service = NewsAcquisitionService(sources=["newsapi", "rsshub"])  
         
         # 初始化处理管道
         self.processing_service = NewsProcessingService(

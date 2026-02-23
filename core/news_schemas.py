@@ -62,8 +62,6 @@ class NewsItemRefinedSchema(BaseModel):
     extra_data: Optional[Dict[str, Any]] = Field(None, description="用于存储特定新闻源独有的、未被通用字段捕获的数据。")
 
 
-
-
 class SupportingDocumentSchema(BaseModel):
     '''
     支持性文档的结构。

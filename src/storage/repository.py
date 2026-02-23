@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from src.storage.db_config import db_manager
 from src.storage.models import RawNews, RawNewsStaging, RefinedNews, SupportingDocument
+from src.storage.models import ZhihuRawPost
 
 
 class StorageRepository:
@@ -467,3 +468,88 @@ class StorageRepository:
         finally:
             if owns:
                 sess.close()
+
+    # ========================
+    # ZhihuRawPost
+    # ========================
+    def add_zhihu_raw_posts(self, items: Sequence[ZhihuRawPost], session: Optional[Session] = None) -> None:
+        sess, owns = self._get_session(session)
+        try:
+            for item in items:
+                sess.add(item)
+            self._finalize(sess, owns)
+        except Exception:
+            if owns:
+                sess.rollback()
+                sess.close()
+            raise
+
+    def exists_zhihu_raw_by_source_url(self, source_url: str, session: Optional[Session] = None) -> bool:
+        sess, owns = self._get_session(session)
+        try:
+            stmt = select(ZhihuRawPost.unique_id).where(ZhihuRawPost.source_url == source_url)
+            return sess.execute(stmt).first() is not None
+        finally:
+            if owns:
+                sess.close()
+
+    def fetch_zhihu_raw_pending(self, limit: int = 20, session: Optional[Session] = None) -> List[ZhihuRawPost]:
+        sess, owns = self._get_session(session)
+        try:
+            stmt = (
+                select(ZhihuRawPost)
+                .where(ZhihuRawPost.status == "pending")
+                .limit(limit)
+            )
+            return list(sess.execute(stmt).scalars().all())
+        finally:
+            if owns:
+                sess.close()
+
+    def reset_zhihu_raw_statuses(
+        self,
+        from_statuses: Iterable[str],
+        to_status: str = "pending",
+        session: Optional[Session] = None,
+    ) -> int:
+        sess, owns = self._get_session(session)
+        try:
+            statuses = list(from_statuses)
+            if not statuses:
+                return 0
+            count = (
+                sess.query(ZhihuRawPost)
+                .filter(ZhihuRawPost.status.in_(statuses))
+                .update({ZhihuRawPost.status: to_status}, synchronize_session=False)
+            )
+            self._finalize(sess, owns)
+            return count
+        except Exception:
+            if owns:
+                sess.rollback()
+                sess.close()
+            raise
+
+    def mark_zhihu_raw_status(
+        self,
+        ids: Iterable[str],
+        status: str,
+        *,
+        session: Optional[Session] = None,
+    ) -> int:
+        sess, owns = self._get_session(session)
+        try:
+            ids = list(ids)
+            if not ids:
+                return 0
+            q = sess.query(ZhihuRawPost).filter(ZhihuRawPost.unique_id.in_(ids))
+            values = {ZhihuRawPost.status: status}
+            count = q.update(values, synchronize_session=False)
+            self._finalize(sess, owns)
+            return count
+        except Exception:
+            if owns:
+                sess.rollback()
+                sess.close()
+            raise
+
