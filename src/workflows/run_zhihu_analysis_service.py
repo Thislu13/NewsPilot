@@ -119,6 +119,12 @@ def reconstruct_body_with_captions(body: str, attachments: list) -> str:
                     placeholder,
                     f"[图片{i}: {caption}]"
                 )
+            else:
+                # 即使没有描述也要替换占位符，让LLM知道这里有图片
+                result_body = result_body.replace(
+                    placeholder,
+                    f"[图片{i}: 图片内容暂无描述]"
+                )
 
     return result_body
 
@@ -483,11 +489,11 @@ async def main(
                 )
             )
 
-            # 等待所有 pending 记录处理完成
+            # 等待所有记录处理完成（包括 pending 和 processing 状态）
             while True:
                 session = db_manager.get_session()
                 remaining = session.query(ZhihuRawPost).filter(
-                    ZhihuRawPost.status == "pending"
+                    ZhihuRawPost.status.in_(["pending", "processing"])
                 ).count()
                 session.close()
 

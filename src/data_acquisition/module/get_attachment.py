@@ -175,18 +175,41 @@ async def _download_attachment(
     url_hash8 = hashlib.md5(url.encode("utf-8")).hexdigest()[:8]
 
     # 3. 下载文件并获取扩展名
-    timeout = aiohttp.ClientTimeout(total=None)
+    timeout = aiohttp.ClientTimeout(total=60, connect=10)  # 添加合理的超时
+
+    # 根据 URL 动态设置 Referer
+    from urllib.parse import urlparse
+    parsed_url = urlparse(url)
+    referer = f"{parsed_url.scheme}://{parsed_url.netloc}/"
+
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer": "https://www.zhihu.com/",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "*/*",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Referer": referer,  # 使用附件所在域名作为 Referer
     }
 
     try:
-        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-            async with session.get(url) as response:
-                response.raise_for_status()
-                data = await response.read()
-                content_type = response.headers.get("Content-Type", "")
+        # 添加重试逻辑（最多重试 2 次）
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+                    async with session.get(url) as response:
+                        # 对于某些 CDN 的自定义错误码（如 567），不重试
+                        if response.status >= 500 and response.status < 600 and response.status != 567:
+                            if attempt < max_retries:
+                                await asyncio.sleep(1 * (attempt + 1))  # 指数退避
+                                continue
+                        response.raise_for_status()
+                        data = await response.read()
+                        content_type = response.headers.get("Content-Type", "")
+                        break  # 成功，跳出重试循环
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                if attempt < max_retries:
+                    await asyncio.sleep(1 * (attempt + 1))
+                    continue
+                raise  # 最后一次重试失败，抛出异常
 
         # 确定文件扩展名
         ext = _get_extension_from_url(url)

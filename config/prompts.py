@@ -474,19 +474,22 @@ ZHIHU_ANALYSIS_PROMPT_CN = {
         转化为结构清晰、可复核、可操作的标准报告。
 
         你的核心职责：
-        1) 翻译暗语（映射为"简称（代码）"）
-        2) 梳理文章逻辑（保留原文并给出对应解读）
-        3) **提炼具体操作建议（买入/卖出/持有哪些股票）**
-        4) 总结其选股与交易判断的方法论
+        1) 翻译暗语（映射为”简称（代码）”）
+        2) **深度解析文章内容（逐段分析不遗漏，分点详细解释，包含专业术语解读）**
+        3) **提取潜在套利逻辑（明确指出获利机会、受益标的、操作方向）**
+        4) **提炼具体操作建议（买入/卖出/持有哪些股票）**
+        5) **总结文章核心观点与整体策略**
 
         重要约束：
-        - 严禁脱离原文过度发挥。
-        - 事实、推断、推测必须明确区分。
-        - 不确定映射必须标注"推测"。
+        - **信息完整性：必须逐段分析，不遗漏文章的任何段落或信息**
+        - **图片信息处理**：文章中可能包含[图片N: 描述]格式的内容，这些通常是关键数据、图表或技术分析，必须作为文章内容的一部分进行分析，自然融入到详细内容解析中，不需要特别标注
+        - 严禁脱离原文过度发挥
+        - 事实、推断、推测必须明确区分
+        - 不确定映射必须标注”推测”
         - **操作建议必须基于文章明确提及或强烈暗示的内容**
-        - 输出必须是标准 JSON 格式，不含 Markdown 标记。
-        - 可联网分析：遇到暗语映射不确定、公司信息缺失、事件背景模糊时，优先使用联网检索（如 google_search）补充核验。
-        - 对联网获得的信息要标注"外部补充"，避免与原文事实混淆。
+        - 输出必须是标准 JSON 格式，不含 Markdown 标记
+        - 可联网分析：遇到暗语映射不确定、公司信息缺失、事件背景模糊时，优先使用联网检索（如 google_search）补充核验
+        - 对联网获得的信息要标注”外部补充”，避免与原文事实混淆
     """,
 
     "USER_PROMPT_TEMPLATE":
@@ -528,89 +531,140 @@ ZHIHU_ANALYSIS_PROMPT_CN = {
         - 给出 1-2 个最可能映射，不要无限扩展。
 
         ## 输出任务
-        1. 暗语翻译：列出文中所有标的，输出”原暗语 -> 标的名称（代码）”，并标注”确定/推测”。
-        2. 文章逻辑梳理：按段落输出”原文片段 + 对应解读”，重点覆盖：
-           - 宏观流动性判断
-           - 板块走势解释
-           - 市场异动下的操作建议
-              - 含 [图片n: ...] 的段落，需引用对应图片描述说明你的判断依据
+
+        1. **暗语翻译**：列出文中所有标的，输出”原暗语 -> 标的名称（代码）”，并标注”确定/推测”
+
+        2. **详细内容解析**（逐段分析，确保不遗漏任何信息）：
+           - **完整性要求**：必须覆盖原文的每一个段落和要点，不得跳过或省略
+           - **结构化分析**：按文章逻辑顺序，将内容划分为若干主题板块（如：宏观判断、板块分析、资金流向、技术信号等）
+           - **内容整合**：文章中的[图片N: 描述]是文章内容的一部分，需要自然融入分析中，不需要特别标注
+           - **术语解读**：对每个专业术语提供简明解释，说明其在文中的作用和含义
+           - **输出格式**：
+             - topic_title: 主题标题（如：宏观流动性判断）
+             - analysis: 详细解析（200-300字，完整覆盖该主题的所有内容）
+             - key_terminology: 专业术语列表及解读
+             - key_points: 核心要点提炼（3-5条）
+             - mentioned_stocks: 提及的股票代码
+
         3. **操作建议提取**：
            - 识别文章中明确或暗示的买入信号
            - 识别文章中明确或暗示的卖出信号
            - 识别文章中建议持有观望的标的
            - 每个建议必须包含：股票代码、股票名称、操作类型、理由、置信度、风险因素
-        4. 选股分析逻辑：总结其选择标的、判断买卖点、风险控制的底层逻辑。
+
+        4. **套利逻辑分析**（新增）：
+           - 提取文章中的潜在套利机会
+           - 分析套利逻辑链（如：事件/政策 -> 行业影响 -> 标的受益）
+           - 明确指出操作方向、受益板块、潜在收益点
+           - 说明套利的风险点和时机要求
+
+        5. **文章总结**（新增）：
+           - 核心观点总结（用一段话概括文章核心判断）
+           - 关键发现提炼（3-5条最关键的信息）
+           - 市场展望（基于文章内容的短期/中期展望）
+
+        6. 选股分析逻辑：总结其选择标的、判断买卖点、风险控制的底层逻辑
 
         ## 输出格式（必须严格遵守）
-        输出标准 JSON，包含以下字段：
+        输出标准 JSON，包含以下字段（按此顺序）：
         {{
-            "meta": {{
-                "analysis_date": "当前时间 YYYY-MM-DD HH:MM:SS",
-                "source_url": "{source_url}",
-                "article_title": "{title}",
-                "confidence_level": "high/medium/low"
+            “meta”: {{
+                “analysis_date”: “当前时间 YYYY-MM-DD HH:MM:SS”,
+                “source_url”: “{source_url}”,
+                “article_title”: “{title}”,
+                “confidence_level”: “high/medium/low”
             }},
-            "coded_terms_translation": [
-                {{
-                    "original_term": "原暗语",
-                    "stock_name": "股票名称",
-                    "stock_code": "股票代码",
-                    "certainty": "confirmed/speculated",
-                    "reasoning": "映射依据"
-                }}
-            ],
-            "article_logic_breakdown": [
-                {{
-                    "section_number": 1,
-                    "original_text": "原文片段",
-                    "interpretation": "解读内容",
-                    "key_points": ["要点1", "要点2"],
-                    "mentioned_stocks": ["代码1", "代码2"]
-                }}
-            ],
-            "actionable_recommendations": {{
-                "buy_signals": [
+            “actionable_recommendations”: {{
+                “buy_signals”: [
                     {{
-                        "stock_code": "600015.SH",
-                        "stock_name": "华夏银行",
-                        "action": "buy",
-                        "reasoning": "买入逻辑（必须基于文章内容）",
-                        "confidence": "high/medium/low",
-                        "price_target": "如有提及",
-                        "time_horizon": "short-term/medium-term/long-term",
-                        "risk_factors": ["风险点1", "风险点2"]
+                        “stock_code”: “600015.SH”,
+                        “stock_name”: “华夏银行”,
+                        “action”: “buy”,
+                        “reasoning”: “买入逻辑（必须基于文章内容）”,
+                        “confidence”: “high/medium/low”,
+                        “price_target”: “如有提及”,
+                        “time_horizon”: “short-term/medium-term/long-term”,
+                        “risk_factors”: [“风险点1”, “风险点2”]
                     }}
                 ],
-                "sell_signals": [
+                “sell_signals”: [
                     {{
-                        "stock_code": "601899.SH",
-                        "stock_name": "紫金矿业",
-                        "action": "sell",
-                        "reasoning": "卖出逻辑（必须基于文章内容）",
-                        "confidence": "high/medium/low",
-                        "risk_factors": ["风险点1", "风险点2"]
+                        “stock_code”: “601899.SH”,
+                        “stock_name”: “紫金矿业”,
+                        “action”: “sell”,
+                        “reasoning”: “卖出逻辑（必须基于文章内容）”,
+                        “confidence”: “high/medium/low”,
+                        “risk_factors”: [“风险点1”, “风险点2”]
                     }}
                 ],
-                "hold_signals": [
+                “hold_signals”: [
                     {{
-                        "stock_code": "600036.SH",
-                        "stock_name": "招商银行",
-                        "action": "hold",
-                        "reasoning": "持有观望的理由"
+                        “stock_code”: “600036.SH”,
+                        “stock_name”: “招商银行”,
+                        “action”: “hold”,
+                        “reasoning”: “持有观望的理由”
                     }}
                 ]
             }},
-            "methodology_summary": {{
-                "stock_selection_logic": ["逻辑1", "逻辑2"],
-                "timing_strategy": "择时策略",
-                "risk_management": "风控原则",
-                "market_view": "市场观点"
-            }},
-            "uncertainties": [
+            “coded_terms_translation”: [
                 {{
-                    "item": "不确定项",
-                    "impact": "可能影响",
-                    "verification_needed": "需验证内容"
+                    “original_term”: “原暗语”,
+                    “stock_name”: “股票名称”,
+                    “stock_code”: “股票代码”,
+                    “certainty”: “confirmed/speculated”,
+                    “reasoning”: “映射依据”
+                }}
+            ],
+            “detailed_content_analysis”: [
+                {{
+                    “topic_title”: “主题标题（如：宏观流动性判断）”,
+                    “analysis”: “详细解析内容，逐点解释原文观点和判断依据”,
+                    “key_terminology”: [
+                        {{
+                            “term”: “专业术语”,
+                            “explanation”: “术语解读，简明扼要说明其含义和在文中的作用”,
+                            “relevance”: “与文章逻辑的关联性”
+                        }}
+                    ],
+                    “key_points”: [“核心要点1”, “核心要点2”],
+                    “mentioned_stocks”: [“代码1”, “代码2”]
+                }}
+            ],
+            “arbitrage_logic”: [
+                {{
+                    “logic_chain”: “套利逻辑链（如：政策利好 -> 行业需求提升 -> 龙头公司受益）”,
+                    “opportunity_description”: “具体套利机会描述（100-200字）”,
+                    “operation_direction”: “操作方向（做多/做空/跨市场套利等）”,
+                    “beneficiary_sectors”: [“受益板块1”, “受益板块2”],
+                    “beneficiary_stocks”: [“受益标的1（代码）”, “受益标的2（代码）”],
+                    “entry_timing”: “入场时机建议”,
+                    “risk_factors”: [“风险点1”, “风险点2”],
+                    “expected_return”: “预期收益空间（如有数据支撑）”
+                }}
+            ],
+            “article_summary”: {{
+                “core_viewpoint”: “核心观点总结（一段话，150-200字概括文章最核心的判断）”,
+                “key_findings”: [
+                    “关键发现1”,
+                    “关键发现2”,
+                    “关键发现3”
+                ],
+                “market_outlook”: {{
+                    “short_term”: “短期展望（1-2周）”,
+                    “medium_term”: “中期展望（1-3个月）”
+                }}
+            }},
+            “methodology_summary”: {{
+                “stock_selection_logic”: [“逻辑1”, “逻辑2”],
+                “timing_strategy”: “择时策略”,
+                “risk_management”: “风控原则”,
+                “market_view”: “市场观点”
+            }},
+            “uncertainties”: [
+                {{
+                    “item”: “不确定项”,
+                    “impact”: “可能影响”,
+                    “verification_needed”: “需验证内容”
                 }}
             ]
         }}
