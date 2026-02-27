@@ -4,8 +4,8 @@
 # LastEditors: WangQiushuo 185886867@qq.com
 # LastEditTime: 2026-02-23 17:59:14
 # FilePath: \NewsPilot\src\workflows\run_service.py
-# Description: 
-# 
+# Description: 统一服务启动入口 - 根据配置文件启动 news 或 zhihu_analysis 服务
+#
 # Copyright (c) 2026 by , All Rights Reserved. 
 
 """

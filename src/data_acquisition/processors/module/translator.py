@@ -4,7 +4,7 @@
 # LastEditors: WangQiushuo 185886867@qq.com
 # LastEditTime: 2026-02-06 02:35:47
 # FilePath: \NewsPilot\src\data_acquisition\processors\module\translator.py
-# Description: 
+# Description: 新闻翻译模块 - 使用 LLM 进行翻译
 # 
 # Copyright (c) 2026 by , All Rights Reserved. 
 

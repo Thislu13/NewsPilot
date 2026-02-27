@@ -98,7 +98,7 @@ class InsightGenerator:
     
     def _format_profile(self, profile) -> str:
         """格式化用户画像"""
-        user_profile_path = r'E:\code\NewsPilot\config\user_profile.json'
+        user_profile_path = "config/user_profile.json"
         with open(user_profile_path, 'r', encoding='utf-8') as f:
             profile_data = f.read()
 

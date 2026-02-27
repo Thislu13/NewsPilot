@@ -17,7 +17,7 @@ class ZhihuAcquisitionService:
     """
 
     def __init__(self):
-        self.fetcher = RSSHubFetcher(choices=["zhihu_people"], attachment_dir=r'E:\code\NewsPilot\data\attachments') 
+        self.fetcher = RSSHubFetcher(choices=["zhihu_people"], attachment_dir="data/attachments") 
 
     async def run(self) -> List[NewsItemRawSchema]:
         """

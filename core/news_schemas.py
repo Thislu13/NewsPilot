@@ -4,7 +4,7 @@
 # LastEditors: WangQiushuo 185886867@qq.com
 # LastEditTime: 2026-01-31 21:36:47
 # FilePath: \NewsPilot\core\news_schemas.py
-# Description: 
+# Description: 新闻数据结构 Pydantic 模型定义
 # 
 # Copyright (c) 2026 by , All Rights Reserved. 
 from pydantic import BaseModel, Field, HttpUrl, field_validator

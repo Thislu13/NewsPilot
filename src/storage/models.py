@@ -1,4 +1,14 @@
-from sqlalchemy import Column, String, Text, DateTime, JSON, ForeignKey, Float
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import func
 
@@ -202,3 +212,36 @@ class ZhihuRawPost(Base):
 
     def __repr__(self):
         return f"<ZhihuRawPost(unique_id={self.unique_id}, title={self.title})>"
+
+
+class SubscriptionTarget(Base):
+    """
+    Subscription targets table.
+    One row represents one account subscribed to one report key.
+    """
+    __tablename__ = "subscription_targets"
+    __table_args__ = (
+        UniqueConstraint(
+            "channel_type",
+            "account",
+            "report_key",
+            name="uq_subscription_targets_channel_account_report",
+        ),
+    )
+
+    id = Column(String(36), primary_key=True)
+    channel_type = Column(String(32), nullable=False, default="email", index=True)
+    account = Column(Text, nullable=False)
+    report_key = Column(String(64), nullable=False, index=True)
+    active_from = Column(DateTime(timezone=True), nullable=True)
+    active_to = Column(DateTime(timezone=True), nullable=True)
+    is_enabled = Column(Boolean, nullable=False, default=True, index=True)
+    extra_data = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    def __repr__(self):
+        return (
+            f"<SubscriptionTarget(id={self.id}, channel_type={self.channel_type}, "
+            f"report_key={self.report_key}, account={self.account})>"
+        )

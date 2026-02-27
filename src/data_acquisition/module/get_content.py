@@ -4,7 +4,7 @@
 # LastEditors: WangQiushuo 185886867@qq.com
 # LastEditTime: 2026-01-31 20:34:32
 # FilePath: \NewsPilot\src\data_acquisition\module\get_content.py
-# Description: 
+# Description: 内容获取工具模块
 # 
 # Copyright (c) 2026 by , All Rights Reserved. 
 

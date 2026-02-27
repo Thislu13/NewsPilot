@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NewsPilot Subscription Admin</title>
+  <style>
+    :root {
+      --bg-a: #f4f8ff;
+      --bg-b: #f6f3ea;
+      --card: #ffffff;
+      --ink: #1f2430;
+      --muted: #657087;
+      --primary: #0051c3;
+      --primary-2: #003d91;
+      --danger: #b42318;
+      --ok: #137a2b;
+      --line: #dde4f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "IBM Plex Sans", "Noto Sans SC", sans-serif;
+      background: linear-gradient(120deg, var(--bg-a), var(--bg-b));
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 24px auto;
+      padding: 0 16px;
+      animation: fade-in .45s ease;
+    }
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    h1 {
+      margin: 0 0 16px;
+      font-size: 28px;
+      letter-spacing: .3px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 8px 24px rgba(5, 23, 64, .06);
+    }
+    .row {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+      align-items: end;
+    }
+    .row-4 {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      align-items: end;
+    }
+    .field label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    input, select, textarea, button {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      padding: 10px 11px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    textarea { min-height: 74px; resize: vertical; }
+    button {
+      cursor: pointer;
+      font-weight: 600;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      transition: .2s ease;
+    }
+    button:hover { background: var(--primary-2); }
+    .btn-secondary { background: #6b7280; }
+    .btn-danger { background: var(--danger); }
+    .btn-ok { background: var(--ok); }
+    .inline-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .inline-actions button {
+      width: auto;
+      padding: 7px 10px;
+      font-size: 12px;
+    }
+    .meta {
+      color: var(--muted);
+      font-size: 13px;
+      margin: 4px 0 0;
+    }
+    .status {
+      font-size: 13px;
+      min-height: 20px;
+      margin-top: 8px;
+      color: var(--primary-2);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 13px;
+    }
+    th, td {
+      padding: 9px 8px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      text-align: left;
+    }
+    th { color: var(--muted); font-weight: 600; }
+    code {
+      background: #eef2fb;
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 12px;
+    }
+    @media (max-width: 980px) {
+      .row, .row-4 { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      .row, .row-4 { grid-template-columns: 1fr; }
+      table { display: block; overflow: auto; white-space: nowrap; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>NewsPilot 订阅管理</h1>
+    <div class="grid">
+      <section class="card">
+        <h3>筛选</h3>
+        <div class="row">
+          <div class="field">
+            <label>report_key</label>
+            <select id="f-report">
+              <option value="">全部</option>
+              <option value="daily_report">daily_report</option>
+              <option value="zhihu_dang_report">zhihu_dang_report</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>channel_type</label>
+            <select id="f-channel">
+              <option value="">全部</option>
+              <option value="email">email</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>enabled</label>
+            <select id="f-enabled">
+              <option value="">全部</option>
+              <option value="true">true</option>
+              <option value="false">false</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>账号关键词</label>
+            <input id="f-keyword" placeholder="example@domain.com" />
+          </div>
+          <div class="field">
+            <label>limit</label>
+            <input id="f-limit" type="number" min="1" max="1000" value="200" />
+          </div>
+          <div class="field">
+            <button id="btn-search" type="button">查询</button>
+          </div>
+        </div>
+        <p class="meta">当前仅支持 email 渠道。每行是一个订阅目标，不区分独立用户实体。</p>
+      </section>
+
+      <section class="card">
+        <h3 id="form-title">新增订阅</h3>
+        <input id="edit-id" type="hidden" />
+        <div class="row-4">
+          <div class="field">
+            <label>channel_type</label>
+            <select id="i-channel">
+              <option value="email">email</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>account</label>
+            <input id="i-account" placeholder="name@example.com" />
+          </div>
+          <div class="field">
+            <label>report_key</label>
+            <select id="i-report">
+              <option value="daily_report">daily_report</option>
+              <option value="zhihu_dang_report">zhihu_dang_report</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>is_enabled</label>
+            <select id="i-enabled">
+              <option value="true">true</option>
+              <option value="false">false</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>active_from</label>
+            <input id="i-from" type="datetime-local" />
+          </div>
+          <div class="field">
+            <label>active_to</label>
+            <input id="i-to" type="datetime-local" />
+          </div>
+          <div class="field">
+            <label>extra_data (JSON)</label>
+            <textarea id="i-extra" placeholder='{"tag":"vip"}'></textarea>
+          </div>
+          <div class="field">
+            <div class="inline-actions">
+              <button id="btn-save" type="button">保存</button>
+              <button id="btn-reset" type="button" class="btn-secondary">清空</button>
+            </div>
+          </div>
+        </div>
+        <div class="status" id="form-status"></div>
+      </section>
+
+      <section class="card">
+        <h3>收件人预览</h3>
+        <div class="row">
+          <div class="field">
+            <label>report_key</label>
+            <select id="p-report">
+              <option value="daily_report">daily_report</option>
+              <option value="zhihu_dang_report">zhihu_dang_report</option>
+            </select>
+          </div>
+          <div class="field">
+            <button id="btn-preview" type="button">预览有效收件人</button>
+          </div>
+        </div>
+        <div id="preview-box" class="meta"></div>
+      </section>
+
+      <section class="card">
+        <h3>订阅列表</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>channel</th>
+              <th>account</th>
+              <th>report</th>
+              <th>time range</th>
+              <th>enabled</th>
+              <th>actions</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function qs(params) {
+      const p = new URLSearchParams();
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== null && v !== undefined && v !== "") p.append(k, v);
+      });
+      return p.toString();
+    }
+
+    function toInputDatetime(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      const tz = d.getTimezoneOffset() * 60000;
+      return new Date(d.getTime() - tz).toISOString().slice(0, 16);
+    }
+
+    function inputDatetimeToIso(value) {
+      if (!value) return null;
+      return new Date(value).toISOString();
+    }
+
+    async function api(path, options = {}) {
+      const res = await fetch(path, {
+        headers: { "Content-Type": "application/json" },
+        ...options
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    }
+
+    function setStatus(msg, error = false) {
+      const el = $("form-status");
+      el.textContent = msg;
+      el.style.color = error ? "#b42318" : "#0051c3";
+    }
+
+    function getFilters() {
+      return {
+        report_key: $("f-report").value,
+        channel_type: $("f-channel").value,
+        is_enabled: $("f-enabled").value,
+        keyword: $("f-keyword").value.trim(),
+        limit: $("f-limit").value
+      };
+    }
+
+    function renderRows(items) {
+      const body = $("table-body");
+      body.innerHTML = "";
+      if (!items.length) {
+        body.innerHTML = `<tr><td colspan="7">暂无数据</td></tr>`;
+        return;
+      }
+      items.forEach((it) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><code>${it.id}</code></td>
+          <td>${it.channel_type}</td>
+          <td>${it.account}</td>
+          <td>${it.report_key}</td>
+          <td>${it.active_from || "-"}<br/>${it.active_to || "-"}</td>
+          <td>${it.is_enabled ? "true" : "false"}</td>
+          <td>
+            <div class="inline-actions">
+              <button class="btn-secondary" data-action="edit" data-id="${it.id}">编辑</button>
+              <button class="${it.is_enabled ? "btn-secondary" : "btn-ok"}" data-action="${it.is_enabled ? "disable" : "enable"}" data-id="${it.id}">
+                ${it.is_enabled ? "禁用" : "启用"}
+              </button>
+              <button class="btn-danger" data-action="delete" data-id="${it.id}">删除</button>
+            </div>
+          </td>
+        `;
+        tr.dataset.item = JSON.stringify(it);
+        body.appendChild(tr);
+      });
+    }
+
+    async function loadSubscriptions() {
+      try {
+        const data = await api(`/api/subscriptions?${qs(getFilters())}`);
+        renderRows(data.items || []);
+      } catch (e) {
+        setStatus(`加载失败: ${e.message}`, true);
+      }
+    }
+
+    function resetForm() {
+      $("edit-id").value = "";
+      $("form-title").textContent = "新增订阅";
+      $("i-channel").value = "email";
+      $("i-account").value = "";
+      $("i-report").value = "daily_report";
+      $("i-enabled").value = "true";
+      $("i-from").value = "";
+      $("i-to").value = "";
+      $("i-extra").value = "";
+    }
+
+    function formPayload() {
+      let extra = null;
+      const extraText = $("i-extra").value.trim();
+      if (extraText) {
+        extra = JSON.parse(extraText);
+      }
+      return {
+        channel_type: $("i-channel").value,
+        account: $("i-account").value.trim(),
+        report_key: $("i-report").value,
+        is_enabled: $("i-enabled").value === "true",
+        active_from: inputDatetimeToIso($("i-from").value),
+        active_to: inputDatetimeToIso($("i-to").value),
+        extra_data: extra
+      };
+    }
+
+    async function saveForm() {
+      try {
+        const id = $("edit-id").value;
+        const payload = formPayload();
+        if (!payload.account) throw new Error("account 不能为空");
+
+        if (id) {
+          await api(`/api/subscriptions/${id}`, {
+            method: "PUT",
+            body: JSON.stringify(payload)
+          });
+          setStatus("更新成功");
+        } else {
+          await api("/api/subscriptions", {
+            method: "POST",
+            body: JSON.stringify(payload)
+          });
+          setStatus("新增成功");
+        }
+        resetForm();
+        await loadSubscriptions();
+      } catch (e) {
+        setStatus(`保存失败: ${e.message}`, true);
+      }
+    }
+
+    async function previewRecipients() {
+      const reportKey = $("p-report").value;
+      const box = $("preview-box");
+      try {
+        const data = await api(`/api/recipients/preview?${qs({ report_key: reportKey })}`);
+        if (!data.recipients || !data.recipients.length) {
+          box.textContent = `${reportKey}: 0 个有效收件人`;
+          return;
+        }
+        box.innerHTML = `<b>${reportKey}</b> (${data.count}):<br/>` + data.recipients.join("<br/>");
+      } catch (e) {
+        box.textContent = `预览失败: ${e.message}`;
+      }
+    }
+
+    $("btn-search").addEventListener("click", loadSubscriptions);
+    $("btn-save").addEventListener("click", saveForm);
+    $("btn-reset").addEventListener("click", resetForm);
+    $("btn-preview").addEventListener("click", previewRecipients);
+
+    $("table-body").addEventListener("click", async (event) => {
+      const btn = event.target.closest("button[data-action]");
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const id = btn.dataset.id;
+      const tr = btn.closest("tr");
+      const item = tr ? JSON.parse(tr.dataset.item || "{}") : {};
+
+      try {
+        if (action === "edit") {
+          $("edit-id").value = item.id || "";
+          $("form-title").textContent = "编辑订阅";
+          $("i-channel").value = item.channel_type || "email";
+          $("i-account").value = item.account || "";
+          $("i-report").value = item.report_key || "daily_report";
+          $("i-enabled").value = item.is_enabled ? "true" : "false";
+          $("i-from").value = toInputDatetime(item.active_from);
+          $("i-to").value = toInputDatetime(item.active_to);
+          $("i-extra").value = item.extra_data ? JSON.stringify(item.extra_data, null, 2) : "";
+          return;
+        }
+        if (action === "enable" || action === "disable") {
+          await api(`/api/subscriptions/${id}/${action}`, { method: "POST", body: "{}" });
+          await loadSubscriptions();
+          return;
+        }
+        if (action === "delete") {
+          if (!window.confirm("确认删除该订阅?")) return;
+          await api(`/api/subscriptions/${id}`, { method: "DELETE" });
+          await loadSubscriptions();
+        }
+      } catch (e) {
+        setStatus(`操作失败: ${e.message}`, true);
+      }
+    });
+
+    loadSubscriptions();
+    previewRecipients();
+  </script>
+</body>
+</html>

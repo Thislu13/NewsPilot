@@ -4,7 +4,7 @@
 # LastEditors: WangQiushuo 185886867@qq.com
 # LastEditTime: 2026-02-06 01:11:40
 # FilePath: \NewsPilot\src\data_acquisition\processors\pipeline.py
-# Description: 
+# Description: 新闻处理流水线 - 翻译、摘要、向量化
 # 
 # Copyright (c) 2026 by , All Rights Reserved. 
 

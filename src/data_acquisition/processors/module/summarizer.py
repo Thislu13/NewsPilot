@@ -4,7 +4,7 @@
 # LastEditors: WangQiushuo 185886867@qq.com
 # LastEditTime: 2026-01-31 18:03:59
 # FilePath: \NewsPilot\src\data_acquisition\processors\module\summarizer.py
-# Description: 
+# Description: 新闻摘要模块 - 使用 LLM 生成摘要
 # 
 # Copyright (c) 2026 by , All Rights Reserved. 
 

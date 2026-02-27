@@ -4,7 +4,7 @@
 # LastEditors: WangQiushuo 185886867@qq.com
 # LastEditTime: 2026-01-29 01:44:52
 # FilePath: \NewsPilot\src\workflows\main_pipeline.py
-# Description: 
+# Description: NewsPilot 主流程控制器 - 完整的每日新闻分析流水线
 # NewsPilot 主流程控制器
 # 完整的每日新闻分析流水线
 # Copyright (c) 2026 by , All Rights Reserved. 

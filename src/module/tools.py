@@ -4,7 +4,7 @@
 # LastEditors: WangQiushuo 185886867@qq.com
 # LastEditTime: 2026-01-31 20:01:39
 # FilePath: \NewsPilot\src\module\uuid_v7.py
-# Description: 
+# Description: 通用工具函数模块
 # 
 # Copyright (c) 2026 by , All Rights Reserved. 
 

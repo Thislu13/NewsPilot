@@ -4,7 +4,7 @@
 # LastEditors: WangQiushuo 185886867@qq.com
 # LastEditTime: 2026-02-06 01:48:21
 # FilePath: \NewsPilot\src\module\init_client.py
-# Description: 
+# Description: LLM 客户端初始化工厂
 # 
 # Copyright (c) 2026 by , All Rights Reserved. 
 

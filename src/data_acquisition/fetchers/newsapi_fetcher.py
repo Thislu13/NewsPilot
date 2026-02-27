@@ -4,7 +4,7 @@
 # LastEditors: WangQiushuo 185886867@qq.com
 # LastEditTime: 2026-01-31 19:39:28
 # FilePath: \NewsPilot\src\data_acquisition\fetchers\newsapi_fetcher.py
-# Description: 
+# Description: NewsAPI 新闻采集器
 # 
 # Copyright (c) 2026 by , All Rights Reserved. 
 

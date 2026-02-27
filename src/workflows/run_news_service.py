@@ -4,9 +4,9 @@
 # LastEditors: WangQiushuo 185886867@qq.com
 # LastEditTime: 2026-02-08 21:52:25
 # FilePath: \NewsPilot\src\workflows\run_news_service.py
-# Description: 
-# 
-# Copyright (c) 2026 by , All Rights Reserved. 
+# Description: 后台新闻采集与处理服务 - 定时抓取、实时处理
+#
+# Copyright (c) 2026 by , All Rights Reserved.
 
 # src/workflows/start_news_service.py
 """

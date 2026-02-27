@@ -2,7 +2,7 @@
 # Author: WangQiushuo 185886867@qq.com
 # Date: 2026-01-31
 # FilePath: \NewsPilot\src\data_acquisition\daemon_orchestrator.py
-# Description: 
+# Description: 守护进程编排器 - 实现"抓取入库"与"异步处理"的解耦
 #   基于数据库状态的长期驻留编排器 (Daemon Orchestrator)。
 #   实现“抓取入库”与“异步处理”的解耦。
 # 

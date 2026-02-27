@@ -4,7 +4,7 @@
 # LastEditors: WangQiushuo 185886867@qq.com
 # LastEditTime: 2026-01-07 23:20:33
 # FilePath: \NewsPilot\src\data_acquisition\fetchers\base_fetcher.py
-# Description: 
+# Description: 基础新闻采集器抽象类
 # 
 # Copyright (c) 2026 by , All Rights Reserved. 
 

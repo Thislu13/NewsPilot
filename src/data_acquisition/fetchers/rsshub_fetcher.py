@@ -4,7 +4,7 @@
 # LastEditors: WangQiushuo 185886867@qq.com
 # LastEditTime: 2026-02-23 20:48:37
 # FilePath: \NewsPilot\src\data_acquisition\fetchers\rsshub_fetcher.py
-# Description: 
+# Description: RSSHub 订阅源采集器
 # 
 # Copyright (c) 2026 by , All Rights Reserved. 
 

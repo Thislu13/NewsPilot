@@ -1,15 +1,11 @@
 #
 # Author: Claude Code
 # Date: 2026-02-22
-# Description: 知乎博主分析服务 - 包含抓取守护进程和分析处理工作流
+# Description: 知乎分析服务 - 启动采集守护进程和处理工作器
+#              1. Acquisition Daemon: 抓取知乎文章，状态标记为 pending
+#              2. Processing Worker: 处理 pending 的文章，调用 LLM 生成 Markdown 分析报告
 
-"""
-启动知乎博主分析服务 (Zhihu Analysis Service)
-架构：
-1. Acquisition Daemon: 定时抓取知乎文章，存入数据库（status=pending）
-2. Processing Worker: 轮询pending记录，调用LLM分析，保存markdown，发送邮件
-"""
-
+import argparse
 import asyncio
 import os
 import sys
@@ -26,31 +22,39 @@ from src.storage import db_manager, StorageRepository, ZhihuRawPost
 from src.distribution.email_sender import send_daily_report_email
 from src.module.content_converter import ContentConverter
 
-# 配置
+# Markdown 输出目录
 MARKDOWN_DIR = Path("data/zhihu_analysis_md")
 FIRST_RUN_FLAG = MARKDOWN_DIR / ".first_run_complete"
 
 
+def parse_bool(value: str) -> bool:
+    v = (value or "").strip().lower()
+    if v in {"1", "true", "yes", "y", "on"}:
+        return True
+    if v in {"0", "false", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"Invalid boolean value: {value}")
+
+
 def is_first_run_complete() -> bool:
-    """检查是否已完成首次运行"""
+    """Check whether first-run bootstrap is complete."""
     return FIRST_RUN_FLAG.exists()
 
 
 def mark_first_run_complete():
-    """标记首次运行已完成"""
+    """Mark first-run bootstrap as complete."""
     FIRST_RUN_FLAG.parent.mkdir(parents=True, exist_ok=True)
     FIRST_RUN_FLAG.write_text(datetime.now().isoformat(), encoding="utf-8")
-    print(f"✅ First run completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"First run completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
 def normalize_title_for_filename(title: str) -> str:
-    """规范化标题用于文件名"""
+    """Normalize title into a safe filename fragment."""
     text = (title or "").strip()
     if not text:
         return "untitled"
 
-    # 兼容中英文冒号，按第一个冒号切分
-    parts = re.split(r"\s*[:：]\s*", text, maxsplit=1)
+    parts = re.split(r"\s*:\s*", text, maxsplit=1)
     if len(parts) == 2 and parts[1].strip():
         text = parts[1].strip()
 
@@ -65,7 +69,7 @@ def save_markdown_file(
     markdown: str,
     markdown_dir: Path
 ) -> str:
-    """保存markdown文件"""
+    """Save markdown output and return file path."""
     published = published_at or datetime.utcnow()
     date_folder = published.strftime("%Y-%m-%d")
     target_dir = markdown_dir / date_folder
@@ -86,7 +90,7 @@ def save_json_file(
     json_content: str,
     json_dir: Path
 ) -> str:
-    """保存原始JSON文件（用于调试和未来分析）"""
+    """Save raw JSON output and return file path."""
     published = published_at or datetime.utcnow()
     date_folder = published.strftime("%Y-%m-%d")
     target_dir = json_dir / date_folder
@@ -102,10 +106,7 @@ def save_json_file(
 
 
 def reconstruct_body_with_captions(body: str, attachments: list) -> str:
-    """
-    重构body，将占位符替换为图片描述
-    用于LLM分析时提供完整上下文
-    """
+    """Replace attachment placeholders with readable caption markers."""
     if not body or not attachments:
         return body
 
@@ -117,20 +118,20 @@ def reconstruct_body_with_captions(body: str, attachments: list) -> str:
             if caption:
                 result_body = result_body.replace(
                     placeholder,
-                    f"[图片{i}: {caption}]"
+                    f"[image{i}: {caption}]"
                 )
             else:
-                # 即使没有描述也要替换占位符，让LLM知道这里有图片
+                # Keep an explicit marker even if caption is missing.
                 result_body = result_body.replace(
                     placeholder,
-                    f"[图片{i}: 图片内容暂无描述]"
+                    f"[image{i}: no caption available]"
                 )
 
     return result_body
 
 
 def extract_source_url(markdown_content: str) -> str:
-    """从markdown内容中提取原文链接"""
+    """Extract zhihu source URL from markdown content."""
     url_pattern = r'https?://[^\s\)]+zhihu\.com[^\s\)]*'
     match = re.search(url_pattern, markdown_content)
     if match:
@@ -139,7 +140,7 @@ def extract_source_url(markdown_content: str) -> str:
 
 
 async def send_markdown_email(md_file: Path):
-    """发送单个markdown文件的邮件通知"""
+    """Send one markdown analysis file as email."""
     try:
         converter = ContentConverter()
         md_content = md_file.read_text(encoding="utf-8")
@@ -159,11 +160,11 @@ async def send_markdown_email(md_file: Path):
                     </head>
                     <body>
                         <div class="header">
-                            <strong>原文链接:</strong> <a href="{source_url}">{source_url}</a>
+                            <strong>:</strong> <a href="{source_url}">{source_url}</a>
                         </div>
                         {html_content}
                         <div class="footer">
-                            生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+                            发送时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                         </div>
                     </body>
                     </html>
@@ -172,19 +173,19 @@ async def send_markdown_email(md_file: Path):
         temp_html = md_file.with_suffix(".html")
         temp_html.write_text(email_html, encoding="utf-8")
 
-        subject = f"知乎分析 - {md_file.stem}"
+        subject = f"知乎分析- {md_file.stem}"
         send_daily_report_email(
             subject=subject,
             html_body_path=str(temp_html),
             attachment_paths=None,
-            service_name="zhihu_analysis"  # 指定服务名称
+            service_name="zhihu_dang_report"
         )
 
         print(f"📧 Email sent: {md_file.name}")
         return True
 
     except Exception as e:
-        print(f"⚠️  Failed to send email for {md_file.name}: {e}")
+        print(f"❌ Failed to send email for {md_file.name}: {e}")
         return False
 
 
@@ -197,16 +198,17 @@ async def run_processing_worker(
     skip_email: bool = False
 ):
     """
-    处理工作流：轮询 zhihu_raw_posts 中 pending 的记录，调用 LLM 分析，保存 markdown
+    处理知乎待分析文章的工作器函数。
+    从 zhihu_raw_posts 表中获取 pending 状态的文章，调用 LLM 生成 Markdown 分析报告。
 
-    注意：图片处理已在 acquisition 阶段完成，这里只做分析
+    依赖 Acquisition Daemon 进行数据采集。
 
     Args:
-        batch_size: 每次处理的批次大小
-        process_interval: 轮询间隔（秒）
-        model_name: 使用的模型名称
-        model_id: 模型ID
-        enable_email: 是否启用邮件通知
+        batch_size: 每次处理的文章数量
+        process_interval: 没有任务时的休眠间隔（秒）
+        model_name: 使用的 LLM 模型名称
+        model_id: 使用的 LLM 模型 ID
+        enable_email: 是否启用邮件发送功能
         skip_email: 是否跳过邮件发送（用于首次运行）
     """
     repo = StorageRepository()
@@ -221,16 +223,16 @@ async def run_processing_worker(
         try:
             session = db_manager.get_session()
 
-            # 1. 拉取 pending 任务（排除重试次数过多的）
+            # 1. 查询 pending 状态的文章
             MAX_RETRIES = 3
             rows = (
                 session.query(ZhihuRawPost)
                 .filter(ZhihuRawPost.status == "pending")
-                .limit(batch_size * 2)  # 多拉取一些，因为可能有些会被过滤
+                .limit(batch_size * 2)  # 多查一些用于过滤超重试次数的记录
                 .all()
             )
 
-            # 过滤掉重试次数过多的记录
+            # 过滤出有效记录和超重试次数需要跳过的记录
             valid_rows = []
             skip_rows = []
             for r in rows:
@@ -242,7 +244,7 @@ async def run_processing_worker(
                     if len(valid_rows) >= batch_size:
                         break
 
-            # 将超过重试次数的记录标记为 failed
+            # 标记超重试次数的记录为 failed
             if skip_rows:
                 skip_ids = [r.unique_id for r in skip_rows]
                 repo.mark_zhihu_raw_status(skip_ids, "failed", session=session)
@@ -253,7 +255,7 @@ async def run_processing_worker(
                         "failed_at": datetime.now().isoformat()
                     }
                 session.commit()
-                print(f"[Processing] ⚠️  Marked {len(skip_rows)} items as failed (max retries exceeded)")
+                print(f"[Processing] ⚠️ Marked {len(skip_rows)} items as failed (max retries exceeded)")
 
             rows = valid_rows
             if not rows:
@@ -264,11 +266,11 @@ async def run_processing_worker(
             print(f"[Processing] Picked up {len(rows)} pending items")
             processing_ids = [r.unique_id for r in rows]
 
-            # 2. 标记为 processing
+            # 2. 标记为 processing 状态
             repo.mark_zhihu_raw_status(processing_ids, "processing", session=session)
             session.commit()
 
-            # 3. 提取数据用于分析（图片描述已在 attachments.caption 中）
+            # 3. 组装数据，使用 caption 重建正文
             rows_data = [
                 {
                     "unique_id": r.unique_id,
@@ -282,17 +284,17 @@ async def run_processing_worker(
 
             session.close()
 
-            # 4. 分析每篇文章
+            # 4. 并发调用 LLM 分析
             async def _analyze_one(row: dict) -> tuple[str, bool, str, str]:
                 try:
-                    # 1. 调用分析器获取JSON输出
+                    # 1. 调用 LLM 分析
                     llm_output = await analyzer.analyze_single(
                         title=row.get("title") or "",
                         body=row.get("body") or "",
                         source_url=row.get("source_url") or "",
                     )
 
-                    # 2. 使用渲染器将JSON转换为Markdown
+                    # 2. 渲染为 Markdown
                     renderer = ZhihuDangReportRenderer()
                     markdown = renderer.render(
                         llm_output_json=llm_output,
@@ -300,7 +302,7 @@ async def run_processing_worker(
                         published_at=row.get("published_at")
                     )
 
-                    # 3. 保存Markdown文件
+                    # 3. 保存 Markdown 文件
                     md_path = save_markdown_file(
                         title=row.get("title") or "",
                         published_at=row.get("published_at"),
@@ -308,7 +310,7 @@ async def run_processing_worker(
                         markdown_dir=MARKDOWN_DIR
                     )
 
-                    # 4. 可选：保存原始JSON用于调试和未来分析
+                    # 4. 保存原始 JSON
                     json_path = save_json_file(
                         title=row.get("title") or "",
                         published_at=row.get("published_at"),
@@ -325,7 +327,7 @@ async def run_processing_worker(
                         f"{type(e).__name__}: {e}"
                     )
 
-            # 串行处理
+            # 收集分析结果
             results: List[tuple[str, bool, str, str]] = []
             for row in rows_data:
                 results.append(await _analyze_one(row))
@@ -335,19 +337,19 @@ async def run_processing_worker(
                 rid: path for rid, ok, path, _ in results if ok
             }
 
-            # 打印失败的错误信息
+            # 记录失败项目详情
             failed_results = [(rid, err) for rid, ok, _, err in results if not ok]
             if failed_results:
-                print(f"[Processing] ❌ Failed items details:")
+                print(f"[Processing] ❌Failed items details:")
                 for rid, err in failed_results:
                     print(f"  - {rid}: {err}")
 
-            # 5. 更新状态
+            # 5. 更新数据库状态
             session = db_manager.get_session()
             if success_ids:
                 repo.mark_zhihu_raw_status(success_ids, "completed", session=session)
 
-                # 更新 extra_data 记录 markdown 路径
+                # 更新 extra_data，记录 Markdown 文件路径
                 fresh_rows = (
                     session.query(ZhihuRawPost)
                     .filter(ZhihuRawPost.unique_id.in_(success_ids))
@@ -364,10 +366,10 @@ async def run_processing_worker(
 
             failed_ids = set(processing_ids) - set(success_ids)
             if failed_ids:
-                # 获取失败记录的错误信息
+                # 收集错误信息
                 failed_errors = {rid: err for rid, ok, _, err in results if not ok}
 
-                # 更新失败记录：增加重试计数，重置为 pending
+                # 处理失败记录，增加重试次数并恢复为 pending 状态
                 failed_rows = (
                     session.query(ZhihuRawPost)
                     .filter(ZhihuRawPost.unique_id.in_(list(failed_ids)))
@@ -382,7 +384,7 @@ async def run_processing_worker(
                         "last_retry_at": datetime.now().isoformat()
                     }
 
-                # 重置为 pending，等待下次重试
+                # 恢复为 pending 状态以便重试
                 repo.mark_zhihu_raw_status(
                     list(failed_ids),
                     "pending",
@@ -394,7 +396,7 @@ async def run_processing_worker(
 
             print(f"[Processing] Completed: {len(success_ids)}, Failed: {len(failed_ids)}")
 
-            # 6. 发送邮件通知
+            # 6. 
             if enable_email and not skip_email and success_ids:
                 for rid in success_ids:
                     md_path = markdown_paths.get(rid)
@@ -405,7 +407,7 @@ async def run_processing_worker(
             print(f"[Processing] Error: {e}")
             if session and session.is_active:
                 session.rollback()
-            # 重置处理中的任务
+            # 恢复 processing 状态的任务为 pending
             if processing_ids:
                 try:
                     sess2 = db_manager.get_session()
@@ -430,21 +432,21 @@ async def main(
     vision_model: str = "qwen-vl-plus"
 ):
     """
-    主函数：运行知乎分析服务
+    知乎分析服务主入口函数。
 
     Args:
-        fetch_interval: 抓取间隔（秒）
-        process_interval: 处理轮询间隔（秒）
-        batch_size: 每次处理的批次大小
-        enable_email: 是否启用邮件通知
-        model_name: 使用的模型名称
-        enable_vision: 是否启用图片理解
-        vision_model: 图片理解模型
+        fetch_interval: 抓取间隔（秒），默认 30 分钟
+        process_interval: 处理间隔（秒），默认 5 秒
+        batch_size: 每次处理的文章数量，默认 10
+        enable_email: 是否启用邮件发送，默认 True
+        model_name: 使用的 LLM 模型名称，默认 gemini
+        enable_vision: 是否启用图片理解功能，默认 True
+        vision_model: 视觉理解模型，默认 qwen-vl-plus
     """
-    # 确保数据库表存在
+    # 初始化数据库表
     db_manager.verify_and_create_tables()
 
-    # 初始化守护进程（负责抓取和图片处理）
+    # 初始化守护进程编排器
     daemon = ZhihuDaemonOrchestrator(
         fetch_interval=fetch_interval,
         enable_vision=enable_vision,
@@ -452,24 +454,24 @@ async def main(
     )
 
     print(f"\n🚀 Zhihu Analysis Service Started [PID: {os.getpid()}]")
-    print(f"├─ 📡 Fetch Interval: {fetch_interval}s")
-    print(f"├─ 🔄 Process Interval: {process_interval}s")
-    print(f"├─ 📧 Email: {'Enabled' if enable_email else 'Disabled'}")
-    print(f"├─ 🤖 Analysis Model: {model_name}")
-    print(f"├─ 👁️  Vision: {'Enabled' if enable_vision else 'Disabled'} ({vision_model})")
-    print("└─ 🛑 Press Ctrl+C to stop...\n")
+    print(f"  📡 Fetch Interval: {fetch_interval}s")
+    print(f"  ⚙️ Process Interval: {process_interval}s")
+    print(f"  📧 Email: {'Enabled' if enable_email else 'Disabled'}")
+    print(f"  🤖 Analysis Model: {model_name}")
+    print(f"  👁️  Vision: {'Enabled' if enable_vision else 'Disabled'} ({vision_model})")
+    print("  🛑 Press Ctrl+C to stop...\n")
 
-    # 首次运行处理
+    # 首次运行处理历史数据
     if not is_first_run_complete():
-        print("🔄 First run detected - processing historical articles without email...")
+        print("🔔 First run detected - processing historical articles without email...")
 
-        # 运行一次抓取
+        # 执行一次抓取
         new_ids = await daemon.run_acquisition_processing_once()
         if new_ids:
-            print(f"📝 Created {len(new_ids)} records with status=pending")
+            print(f"✅ Created {len(new_ids)} records with status=pending")
 
-        # 处理所有 pending 记录（不发送邮件）
-        print("🔄 Processing pending records (no email)...")
+        # 处理 pending 记录
+        print("⚙️ Processing pending records (no email)...")
         session = db_manager.get_session()
         pending_count = session.query(ZhihuRawPost).filter(
             ZhihuRawPost.status == "pending"
@@ -477,19 +479,19 @@ async def main(
         session.close()
 
         if pending_count > 0:
-            print(f"📝 Found {pending_count} pending records to process...")
-            # 启动临时处理工作流（跳过邮件）
+            print(f"📋 Found {pending_count} pending records to process...")
+            # 启动临时工作器处理历史数据
             temp_worker_task = asyncio.create_task(
                 run_processing_worker(
                     batch_size=batch_size,
-                    process_interval=1,  # 快速处理
+                    process_interval=1,  # 快速轮询
                     model_name=model_name,
                     enable_email=enable_email,
-                    skip_email=True  # 跳过邮件
+                    skip_email=True  # 首次运行不发送邮件
                 )
             )
 
-            # 等待所有记录处理完成（包括 pending 和 processing 状态）
+            # 等待 pending 和 processing 状态都处理完成
             while True:
                 session = db_manager.get_session()
                 remaining = session.query(ZhihuRawPost).filter(
@@ -501,22 +503,22 @@ async def main(
                     temp_worker_task.cancel()
                     break
 
-                print(f"⏳ Processing... {remaining} remaining")
+                print(f"⚙️ Processing... {remaining} remaining")
                 await asyncio.sleep(5)
 
         mark_first_run_complete()
         print("✅ First run completed. Future runs will send email notifications.\n")
 
-    # 正常运行：启动并发任务
-    print("🔁 Starting normal operation...\n")
+    # 启动正常循环模式
+    print("🚀 Starting normal operation...\n")
 
     async def acquisition_loop():
-        """抓取循环"""
+        """Polling loop for acquisition daemon."""
         while True:
             await daemon.run_acquisition_processing_once()
             await asyncio.sleep(fetch_interval)
 
-    # 启动并发任务
+    # 并发运行采集循环和处理工作器
     await asyncio.gather(
         acquisition_loop(),
         run_processing_worker(
@@ -533,8 +535,27 @@ if __name__ == "__main__":
     if sys.platform.startswith("win"):
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\n👋 Zhihu Analysis Service Stopped.")
+    parser = argparse.ArgumentParser(description="Run zhihu analysis service.")
+    parser.add_argument("--fetch-interval", type=int, default=60 * 30)
+    parser.add_argument("--process-interval", type=int, default=5)
+    parser.add_argument("--batch-size", type=int, default=10)
+    parser.add_argument("--enable-email", type=parse_bool, default=True)
+    parser.add_argument("--model-name", type=str, default="gemini")
+    parser.add_argument("--enable-vision", type=parse_bool, default=True)
+    parser.add_argument("--vision-model", type=str, default="qwen-vl-plus")
+    args = parser.parse_args()
 
+    try:
+        asyncio.run(
+            main(
+                fetch_interval=args.fetch_interval,
+                process_interval=args.process_interval,
+                batch_size=args.batch_size,
+                enable_email=args.enable_email,
+                model_name=args.model_name,
+                enable_vision=args.enable_vision,
+                vision_model=args.vision_model,
+            )
+        )
+    except KeyboardInterrupt:
+        print("\nZhihu Analysis Service Stopped.")

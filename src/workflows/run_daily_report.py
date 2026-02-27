@@ -1,56 +1,60 @@
-# src/workflows/run_daily_report.py
 """
-生成每日报表 (Daily Report Task)
-职责：
-1. 计算正确的统计时间窗口 (昨天 8:00 BM - 今天 8:00 AM)
-2. 调用 Analyzer 生成全量报表
-该脚本通常由系统定时任务 (Cron/Task Scheduler) 调用，也可手动运行。
+Daily report workflow entry.
 """
+
+import argparse
 import asyncio
 import os
 import sys
 from datetime import datetime, time, timedelta
 
-# Add project root to path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(os.path.dirname(current_dir))
-sys.path.append(project_root)
+# Add project root to path for direct execution.
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(CURRENT_DIR))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
 
+from src.distribution.email_sender import send_daily_report_email
 from src.intelligence.new_analyzer import NewsAnalyzer
-# Import Distribution
-try:
-    from src.distribution.email_sender import send_daily_report_email
-except ImportError:
-    import sys
-    sys.path.append(os.path.join(os.path.dirname(__file__), '../../'))
-    from src.distribution.email_sender import send_daily_report_email
 
-# Config
 
-async def main(model_name: str, save_dir: str, report_time: time = time(8, 0), enable_email: bool = False):
-    """
-    运行日报生成任务
-    :param save_dir: 报告保存目录
-    :param model_name: 使用的模型名称 (gemini, deepseek, etc.)
-    :param report_time: 结算时间点 (默认 08:00)
-    :param enable_email: 是否开启邮件分发
-    """
-    print(f"\n🚀 Starting Daily Report Task [Model: {model_name}]")
-    
+def parse_bool(value: str) -> bool:
+    v = (value or "").strip().lower()
+    if v in {"1", "true", "yes", "y", "on"}:
+        return True
+    if v in {"0", "false", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"Invalid boolean value: {value}")
+
+
+def parse_report_time(value: str) -> time:
+    try:
+        hour_str, minute_str = value.split(":", 1)
+        return time(int(hour_str), int(minute_str))
+    except Exception as exc:
+        raise argparse.ArgumentTypeError("report_time must be HH:MM") from exc
+
+
+async def main(
+    model_name: str,
+    save_dir: str,
+    report_time: time = time(8, 0),
+    enable_email: bool = False,
+):
+    print(f"\n[daily_report] starting [model={model_name}]")
     analyzer = NewsAnalyzer(model_name=model_name)
-    
-    # Calculate Time Window (Yesterday 8:00 AM -> Today 8:00 AM)
+
     now = datetime.now()
     today_cutoff = datetime.combine(now.date(), report_time)
-    
-    # Check if run before the cutoff time
     if now.time() < report_time:
-        print(f"⚠️  Early Run: Current time {now.strftime('%H:%M')} < {report_time}. Generating PREVIEW.")
-    
+        print(
+            f"[daily_report] early run: now={now.strftime('%H:%M')} < cutoff={report_time.strftime('%H:%M')}"
+        )
+
     yesterday_cutoff = today_cutoff - timedelta(days=1)
-    
-    print(f"📅 Time Window: {yesterday_cutoff} -> {today_cutoff}")
-    print(f"📂 Output Dir: {save_dir}\n")
+    print(f"[daily_report] window: {yesterday_cutoff} -> {today_cutoff}")
+    print(f"[daily_report] output_dir: {save_dir}")
+
     save_md_path = os.path.join(save_dir, "markdown")
     save_html_path = os.path.join(save_dir, "html")
     save_pdf_path = os.path.join(save_dir, "pdf")
@@ -59,94 +63,107 @@ async def main(model_name: str, save_dir: str, report_time: time = time(8, 0), e
         results = await analyzer.generate_all_daily_reports(
             target_date=today_cutoff.date(),
             time_range=(yesterday_cutoff, today_cutoff),
-            save_md_list="ALL",  # 默认保存所有 Markdown
-            save_html_list=["total"],    # 默认只保存总日报 HTML
-            save_pdf_list="ALL_CATEGORIES",    # 保存所有 PDF (含 total 和分领域)
+            save_md_list="ALL",
+            save_html_list=["total"],
+            save_pdf_list="ALL_CATEGORIES",
             md_output_dir=save_md_path,
             html_output_dir=save_html_path,
-            pdf_output_dir=save_pdf_path
+            pdf_output_dir=save_pdf_path,
         )
-        print("\n✅ Report Generation Completed.")
-        
-        # --- Email Distribution ---
+        print("[daily_report] report generation completed.")
+
         if enable_email:
-            try:
-                print(f"[*] Starting Email Distribution...")
-                
-                # 1. Body: Total HTML
-                total_html_path = results.get("total", {}).get("html_path")
-                
-                # 2. Attachments: All PDFs (Categories + Total)
-                attachment_paths = []
-                
-                # Add Total PDF
-                if results.get("total", {}).get("pdf_path"):
-                    attachment_paths.append(results["total"]["pdf_path"])
-                    
-                # Add Category PDFs
-                for cat, res in results.items():
-                    if cat == "total": continue
-                    if res.get("pdf_path"):
-                        attachment_paths.append(res["pdf_path"])
-                
-                subject = f"NewsPilot 全领域深度日报 ({today_cutoff.date()})"
-                
-                # 只有当有内容时才发送
-                if total_html_path or attachment_paths:
-                    send_daily_report_email(subject, total_html_path, attachment_paths)
-                else:
-                    print("⚠️ 没有生成 HTML 或 PDF，跳过发送邮件。")
+            print("[daily_report] email distribution enabled.")
+            total_html_path = results.get("total", {}).get("html_path")
+            attachment_paths = []
+            if results.get("total", {}).get("pdf_path"):
+                attachment_paths.append(results["total"]["pdf_path"])
+            for cat, res in results.items():
+                if cat == "total":
+                    continue
+                if res.get("pdf_path"):
+                    attachment_paths.append(res["pdf_path"])
 
-            except Exception as e:
-                print(f"❌ 邮件发送流程异常: {e}")
-                
+            subject = f"NewsPilot Daily Report ({today_cutoff.date()})"
+            if total_html_path or attachment_paths:
+                send_daily_report_email(
+                    subject=subject,
+                    html_body_path=total_html_path,
+                    attachment_paths=attachment_paths,
+                    service_name="daily_report",
+                )
+            else:
+                print("[daily_report] no HTML/PDF generated, skip email.")
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"[daily_report] error: {e}")
 
-async def scheduler(save_dir: str, model_name: str = "gemini", report_time: time = time(8, 0), enable_email: bool = False):
-    """
-    定时调度任务：每天指定时间运行
-    """
-    print(f"\n🔁 Starting Scheduler Mode. Target time: {report_time} daily. Email: {enable_email}")
-    
+
+async def scheduler(
+    save_dir: str,
+    model_name: str = "gemini",
+    report_time: time = time(8, 0),
+    enable_email: bool = False,
+):
+    print(
+        f"[daily_report] scheduler started; report_time={report_time.strftime('%H:%M')}, "
+        f"enable_email={enable_email}"
+    )
     while True:
         now = datetime.now()
         target_time = datetime.combine(now.date(), report_time)
-        
-        # If today's target time has passed, schedule for tomorrow
         if now.time() > report_time:
-             target_time += timedelta(days=1)
-        
+            target_time += timedelta(days=1)
+
         wait_seconds = (target_time - now).total_seconds()
-        print(f"⏳ Sleeping for {wait_seconds:.0f}s (until {target_time})...")
-        
+        print(f"[daily_report] sleeping {wait_seconds:.0f}s until {target_time}")
         await asyncio.sleep(wait_seconds)
-        
-        # Run the task
-        print(f"\n⏰ Waking up for scheduled run at {datetime.now()}")
-        await main(model_name="gemini", save_dir=DEFAULT_SAVE_DIR, report_time=time(8, 0), enable_email=enable_email)
-        
-        # Wait a bit to prevent re-triggering immediately
+
+        print(f"[daily_report] triggering scheduled run at {datetime.now()}")
+        await main(
+            model_name=model_name,
+            save_dir=save_dir,
+            report_time=report_time,
+            enable_email=enable_email,
+        )
         await asyncio.sleep(60)
 
-if __name__ == "__main__":
-    if sys.platform.startswith('win'):
-        # 解决 Windows 上 EventLoop 关闭时的 RuntimeError
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-        
-    try:
-        # Default Configuration: Output to project_root/data/reports/...
-        DEFAULT_SAVE_DIR = os.path.join(project_root, "data", 'daily_reports')
-        
-        #如果想生成昨天的报表，可以取消下面这行注释，并注释掉scheduler的调用
-        # asyncio.run(main(save_dir=DEFAULT_SAVE_DIR, model_name="gemini", report_time=time(8, 0), enable_email=True))
 
-        # 启动定时调度器
-        asyncio.run(scheduler(
-            save_dir=DEFAULT_SAVE_DIR,
-            model_name="gemini",
-            report_time=time(8, 0),
-            enable_email=True # 默认开启邮件推送
-        ))
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Run daily report workflow.")
+    parser.add_argument("--enable-email", type=parse_bool, default=True)
+    parser.add_argument("--mode", choices=["schedule", "once"], default="schedule")
+    parser.add_argument("--model-name", default="gemini")
+    parser.add_argument("--report-time", type=parse_report_time, default=time(8, 0))
+    parser.add_argument(
+        "--save-dir",
+        default=os.path.join(PROJECT_ROOT, "data", "daily_reports"),
+    )
+    return parser
+
+
+if __name__ == "__main__":
+    if sys.platform.startswith("win"):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    args = build_arg_parser().parse_args()
+    try:
+        if args.mode == "once":
+            asyncio.run(
+                main(
+                    model_name=args.model_name,
+                    save_dir=args.save_dir,
+                    report_time=args.report_time,
+                    enable_email=args.enable_email,
+                )
+            )
+        else:
+            asyncio.run(
+                scheduler(
+                    save_dir=args.save_dir,
+                    model_name=args.model_name,
+                    report_time=args.report_time,
+                    enable_email=args.enable_email,
+                )
+            )
     except KeyboardInterrupt:
-        print("\n👋 Scheduler Stopped.")
+        print("[daily_report] stopped.")
