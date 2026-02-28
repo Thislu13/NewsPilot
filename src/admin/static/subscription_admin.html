@@ -70,6 +70,23 @@
       color: var(--muted);
       margin-bottom: 4px;
     }
+    .checkbox-group {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      padding: 8px 0;
+    }
+    .checkbox-group label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 14px;
+      color: var(--ink);
+      cursor: pointer;
+    }
+    .checkbox-group input[type="checkbox"] {
+      width: auto;
+    }
     input, select, textarea, button {
       width: 100%;
       border-radius: 10px;
@@ -197,14 +214,14 @@
           </div>
           <div class="field">
             <label>account</label>
-            <input id="i-account" placeholder="name@example.com" />
+            <input id="i-account" placeholder="name@example.com, another@example.com (逗号分隔批量输入)" />
           </div>
           <div class="field">
             <label>report_key</label>
-            <select id="i-report">
-              <option value="daily_report">daily_report</option>
-              <option value="zhihu_dang_report">zhihu_dang_report</option>
-            </select>
+            <div id="i-report-group" class="checkbox-group">
+              <label><input type="checkbox" name="report_key" value="daily_report" /> daily_report</label>
+              <label><input type="checkbox" name="report_key" value="zhihu_dang_report" /> zhihu_dang_report</label>
+            </div>
           </div>
           <div class="field">
             <label>is_enabled</label>
@@ -215,11 +232,11 @@
           </div>
           <div class="field">
             <label>active_from</label>
-            <input id="i-from" type="datetime-local" />
+            <input id="i-from" type="date" />
           </div>
           <div class="field">
             <label>active_to</label>
-            <input id="i-to" type="datetime-local" />
+            <input id="i-to" type="date" />
           </div>
           <div class="field">
             <label>extra_data (JSON)</label>
@@ -286,13 +303,17 @@
     function toInputDatetime(iso) {
       if (!iso) return "";
       const d = new Date(iso);
-      const tz = d.getTimezoneOffset() * 60000;
-      return new Date(d.getTime() - tz).toISOString().slice(0, 16);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
     }
 
     function inputDatetimeToIso(value) {
       if (!value) return null;
-      return new Date(value).toISOString();
+      // 日期精确到天，自动补全为 00:00:00
+      const isoDate = new Date(value + "T00:00:00").toISOString();
+      return isoDate;
     }
 
     async function api(path, options = {}) {
@@ -366,9 +387,18 @@
       $("form-title").textContent = "新增订阅";
       $("i-channel").value = "email";
       $("i-account").value = "";
-      $("i-report").value = "daily_report";
+      // 清除 report_key checkbox 并默认选中第一个
+      document.querySelectorAll('input[name="report_key"]').forEach((cb, idx) => {
+        cb.checked = idx === 0; // 默认选中第一个
+      });
       $("i-enabled").value = "true";
-      $("i-from").value = "";
+      // 默认时间：今天
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const defaultDate = `${yyyy}-${mm}-${dd}`;
+      $("i-from").value = defaultDate;
       $("i-to").value = "";
       $("i-extra").value = "";
     }
@@ -379,10 +409,16 @@
       if (extraText) {
         extra = JSON.parse(extraText);
       }
+      // 获取所有选中的 report_key
+      const reportKeys = Array.from(document.querySelectorAll('input[name="report_key"]:checked')).map(cb => cb.value);
+      // 解析逗号分隔的账号
+      const accountText = $("i-account").value.trim();
+      const accounts = accountText ? accountText.split(",").map(a => a.trim()).filter(a => a) : [];
+
       return {
         channel_type: $("i-channel").value,
-        account: $("i-account").value.trim(),
-        report_key: $("i-report").value,
+        accounts: accounts,
+        report_keys: reportKeys,
         is_enabled: $("i-enabled").value === "true",
         active_from: inputDatetimeToIso($("i-from").value),
         active_to: inputDatetimeToIso($("i-to").value),
@@ -394,20 +430,51 @@
       try {
         const id = $("edit-id").value;
         const payload = formPayload();
-        if (!payload.account) throw new Error("account 不能为空");
+
+        // 验证
+        if (!payload.accounts || payload.accounts.length === 0) {
+          throw new Error("account 不能为空");
+        }
+        if (!payload.report_keys || payload.report_keys.length === 0) {
+          throw new Error("请至少选择一个 report_key");
+        }
 
         if (id) {
+          // 编辑模式：更新单条记录（保持原有单账号单报告逻辑）
           await api(`/api/subscriptions/${id}`, {
             method: "PUT",
-            body: JSON.stringify(payload)
+            body: JSON.stringify({
+              channel_type: payload.channel_type,
+              account: payload.accounts[0] || "",
+              report_key: payload.report_keys[0] || "",
+              is_enabled: payload.is_enabled,
+              active_from: payload.active_from,
+              active_to: payload.active_to,
+              extra_data: payload.extra_data
+            })
           });
           setStatus("更新成功");
         } else {
-          await api("/api/subscriptions", {
-            method: "POST",
-            body: JSON.stringify(payload)
-          });
-          setStatus("新增成功");
+          // 新增模式：批量创建每个账号+报告的组合
+          let createdCount = 0;
+          for (const account of payload.accounts) {
+            for (const reportKey of payload.report_keys) {
+              await api("/api/subscriptions", {
+                method: "POST",
+                body: JSON.stringify({
+                  channel_type: payload.channel_type,
+                  account: account,
+                  report_key: reportKey,
+                  is_enabled: payload.is_enabled,
+                  active_from: payload.active_from,
+                  active_to: payload.active_to,
+                  extra_data: payload.extra_data
+                })
+              });
+              createdCount++;
+            }
+          }
+          setStatus(`新增成功，共创建 ${createdCount} 条记录`);
         }
         resetForm();
         await loadSubscriptions();
@@ -450,7 +517,10 @@
           $("form-title").textContent = "编辑订阅";
           $("i-channel").value = item.channel_type || "email";
           $("i-account").value = item.account || "";
-          $("i-report").value = item.report_key || "daily_report";
+          // 处理 report_key 多选 checkbox
+          document.querySelectorAll('input[name="report_key"]').forEach(cb => {
+            cb.checked = cb.value === item.report_key;
+          });
           $("i-enabled").value = item.is_enabled ? "true" : "false";
           $("i-from").value = toInputDatetime(item.active_from);
           $("i-to").value = toInputDatetime(item.active_to);
@@ -470,6 +540,11 @@
       } catch (e) {
         setStatus(`操作失败: ${e.message}`, true);
       }
+    });
+
+    // 初始化：默认选中第一个 report_key
+    document.querySelectorAll('input[name="report_key"]').forEach((cb, idx) => {
+      cb.checked = idx === 0;
     });
 
     loadSubscriptions();

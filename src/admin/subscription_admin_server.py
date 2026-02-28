@@ -150,12 +150,14 @@ class SubscriptionAdminHandler(BaseHTTPRequestHandler):
         if path == "/api/subscriptions":
             try:
                 body = self._read_json()
+                active_from = parse_iso_datetime(body.get("active_from"))
+                active_to = parse_iso_datetime(body.get("active_to"))
                 row = self.repo.create_subscription_target(
                     channel_type=body.get("channel_type", "email"),
                     account=body["account"],
                     report_key=body["report_key"],
-                    active_from=parse_iso_datetime(body.get("active_from")),
-                    active_to=parse_iso_datetime(body.get("active_to")),
+                    active_from=active_from,
+                    active_to=active_to,
                     is_enabled=bool(body.get("is_enabled", True)),
                     extra_data=body.get("extra_data"),
                 )
