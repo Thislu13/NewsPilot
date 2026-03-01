@@ -3,6 +3,8 @@
 tools/
 .history/
 data/
+logs/
+src/module/agent/skills
 #密钥文件
 config/keys.py
 #用户画像

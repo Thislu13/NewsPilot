@@ -19,6 +19,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 from core.news_schemas import Attachment, NewsItemRawSchema
+from src.module.tools import extract_host
 
 
 def extract_attachment_urls_from_html(html: str) -> tuple[str, List[Dict[str, Any]]]:
@@ -76,8 +77,6 @@ def extract_attachment_urls_from_html(html: str) -> tuple[str, List[Dict[str, An
 async def enrich_attachment(
     normalized_list: List[NewsItemRawSchema],
     download_root: Path = Path("data/attachments"),
-    prefix: str = "zhihu",
-    replace_with_placeholder: bool = True
 ) -> List[NewsItemRawSchema]:
     """
     下载附件并填充file_id字段
@@ -97,7 +96,7 @@ async def enrich_attachment(
         if not item.attachments:
             enriched_list.append(item)
             continue
-
+        
         # 下载每个附件
         enriched_attachments = []
         for idx, att in enumerate(item.attachments):
@@ -113,17 +112,14 @@ async def enrich_attachment(
                 published_at=item.published_at,
                 index=idx,
                 download_root=download_root,
-                prefix=prefix
+                prefix=extract_host(item.source_url) or "unknown"
             )
 
             # 创建新的Attachment对象，填充file_id
             enriched_att = att.model_copy(update={"file_id": file_id})
             enriched_attachments.append(enriched_att)
 
-        # 可选：替换body中的媒体标签为占位符
         new_body = item.body
-        if replace_with_placeholder:
-            new_body = _replace_media_with_placeholders(item.body, enriched_attachments)
 
         # 创建新的NewsItemRawSchema
         enriched_item = item.model_copy(update={
@@ -231,44 +227,6 @@ async def _download_attachment(
     except Exception as e:
         print(f"[WARN] Download attachment failed: {url} -> {type(e).__name__}: {e!r}")
         return None
-
-
-def _replace_media_with_placeholders(body: str, attachments: List[Attachment]) -> str:
-    """
-    将body中的媒体标签替换为<attach_n>占位符
-
-    注意：这个函数假设body可能包含HTML标签
-    如果body是纯文本，则不做替换
-
-    Args:
-        body: 原始body文本（可能包含HTML）
-        attachments: 附件列表
-
-    Returns:
-        替换后的body文本
-    """
-    if not body or not attachments:
-        return body
-
-    # 检查body是否包含HTML标签
-    if not ("<img" in body or "<video" in body):
-        # 纯文本，不需要替换
-        return body
-
-    # 解析HTML
-    soup = BeautifulSoup(body, "html.parser")
-    media_tags = soup.find_all(["img", "video"])
-
-    # 为每个媒体标签创建占位符
-    for idx, tag in enumerate(media_tags):
-        if idx < len(attachments):
-            placeholder = f"<attach_{idx}>"
-            tag.replace_with(placeholder)
-
-    # 返回处理后的文本
-    result = soup.get_text("\n", strip=True)
-    result = re.sub(r"\n{2,}", "\n", result).strip()
-    return result
 
 
 def _safe_name(value: str, fallback: str = "unknown") -> str:

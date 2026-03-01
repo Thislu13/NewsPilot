@@ -2,7 +2,7 @@
 # Author: WangQiushuo 185886867@qq.com
 # Date: 2025-12-23 21:59:45
 # LastEditors: WangQiushuo 185886867@qq.com
-# LastEditTime: 2026-02-23 20:48:37
+# LastEditTime: 2026-03-01 23:31:46
 # FilePath: \NewsPilot\src\data_acquisition\fetchers\rsshub_fetcher.py
 # Description: RSSHub 订阅源采集器
 # 
@@ -19,9 +19,10 @@ import feedparser
 
 
 from src.data_acquisition.fetchers.base_fetcher import BaseFetcher
-from src.data_acquisition.module.get_attachment import extract_attachment_urls_from_html
+from src.data_acquisition.module.get_attachment import extract_attachment_urls_from_html, enrich_attachment
 from src.module.tools import generate_uuid7
 from core.news_schemas import NewsItemRawSchema, Attachment
+from config.settings import RSS_CONFIG
 
 # from data_acquisition.module.get_content import enrich_full_content
 
@@ -29,86 +30,6 @@ class RSSHubFetcher(BaseFetcher):
     """
     RSSHub 抓取器实现
     """
-    RSS_CONFIG = {
-        # https://docs.rsshub.app/routes/reuters
-        # 路透社
-        'reuters': {
-            'url':'/reuters',
-            "options":[
-                '/world', '/business', '/legal', '/markets', '/breakingviews', '/technology'
-            ]
-        },
-        # https://docs.rsshub.app/routes/eastmoney
-        # 东方财富网
-        # 该处返回的是研报表（概述部分相对比较完整了） 
-        # 其中link 中返回的直接是pdf文件链接，后续考虑增加到支撑文件中
-        'eastmoney': {
-            'url':'/eastmoney/report',
-            "options":[
-                "/strategyreport", "/macresearch", "/brokerreport", "/industry"
-            ]  
-        },
-        # https://docs.rsshub.app/routes/bloomberg
-        # 彭博社
-        # 没有description 字段
-        'bloomberg': {
-            'url':'/bloomberg',
-            "options":[
-            ]  
-        },
-        # https://docs.rsshub.app/routes/cls
-        # 财联社
-        # description 字段基本基本是全文
-        'cls': {
-            'url':'/cls/telegraph',
-            "options":[]  
-        },
-        # https://docs.rsshub.app/routes/bbc
-        # BBC
-        'bbc': {
-            'url':'/bbc',
-            "options":[
-            ]  
-        },
-
-        # https://docs.rsshub.app/routes/ftchinese
-        # FT中文网
-        # description 字段基本基本是全文
-        'ftchinese': {
-            'url':'/ftchinese/simplified',
-            "options":[
-            ]  
-        },
-        # https://docs.rsshub.app/routes/10jqka
-        # 同花顺
-        '10jqka': {
-            'url':'/10jqka/realtimenews',
-            "options":[
-            ]  
-        },
-
-        # https://docs.rsshub.app/routes/wallstreetcn
-        #华尔街见闻
-        'wallstreetcn': {
-            'url':'/wallstreetcn',
-            "options":[
-                '/live'
-            ]
-        },
-        # https://docs.rsshub.app/routes/zhihu
-        # 知乎
-        # 用户动态（activities）示例：
-        # http://localhost:1200/zhihu/people/activities/mr-dang-77
-        'zhihu_people': {
-            'url':'/zhihu',
-            "options":[
-                '/people/activities/mr-dang-77',
-                # '/posts/people/mr-dang-77',  # 用户发布的文章
-                # '/answers/people/mr-dang-77',  # 用户的回答
-                # '/people/pins/mr-dang-77',  # 用户的想法
-            ]
-        }
-    }
 
     @property
     def SOURCE_NAME(self) -> str:
@@ -713,30 +634,15 @@ class RSSHubFetcher(BaseFetcher):
             if normalized:
                 normalized_list.append(normalized)
 
+        # enrich_full_content(normalized_list)
+
         # 如果设置了attachment_dir，则下载附件
         if self.attachment_dir is not None:
-            from src.data_acquisition.module.get_attachment import enrich_attachment
+            
             normalized_list = await enrich_attachment(
-                normalized_list=normalized_list,
+                normalized_list,
                 download_root=self.attachment_dir,
-                prefix="rsshub",
-                replace_with_placeholder=False  # 已在extract_attachment_urls_from_html中替换
             )
 
-        # enrich_full_content(normalized_list)
+        
         return normalized_list
-
-if __name__ == "__main__":
-    fetcher = RSSHubFetcher()
-    result = asyncio.run(fetcher.fetch_and_normalize())
-    import json
-    print(f"Total normalized articles: {len(result)}")
-    json_str = json.dumps(
-        [item.model_dump() for item in result],
-        ensure_ascii=False,
-        indent=2,
-        default=str,
-    )
-    json_path = r"E:\code\NewsPilot\data\temp\news\rsshub_normalized_output.json"
-    with open(json_path, "w", encoding="utf-8") as f:
-        f.write(json_str)

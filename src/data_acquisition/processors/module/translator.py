@@ -2,7 +2,7 @@
 # Author: WangQiushuo 185886867@qq.com
 # Date: 2026-01-09 23:37:21
 # LastEditors: WangQiushuo 185886867@qq.com
-# LastEditTime: 2026-02-06 02:35:47
+# LastEditTime: 2026-03-01 20:42:51
 # FilePath: \NewsPilot\src\data_acquisition\processors\module\translator.py
 # Description: 新闻翻译模块 - 使用 LLM 进行翻译
 # 
@@ -24,9 +24,14 @@ class Translator:
     新闻翻译模块：异步翻译标题、摘要、正文
     """
 
-    def __init__(self, type: str = "llm", model_name: str = "qwen"):
+    def __init__(self, 
+                 type: str = "llm", model_name: str = "qwen", model_id: str = "qwen-flash",
+                 target_language: str = "zh", max_concurrent: int = 5):
         self.type = type
         self.model_name = model_name
+        self.model_id = model_id
+        self.target_language = target_language
+        self.semaphore = asyncio.BoundedSemaphore(max_concurrent)  # 控制并发数量
 
         if self.type == "llm":
             factory = LLMClientFactory()
@@ -36,14 +41,14 @@ class Translator:
         if hasattr(self, '_client') and self._client:
             await self._client.close()
 
-    async def llm_translate_async(self, news_item: NewsItemRawSchema, target_language: str = "zh") -> NewsItemRawSchema:
+    async def llm_translate_async(self, news_item: NewsItemRawSchema) -> NewsItemRawSchema:
         """
         异步翻译单条新闻的标题、摘要、正文 (Batch Mode)
         """
         system_prompt = TRANSLATION_BATCH_PROMPT_CN["SYSTEM_PROMPT"]
         
         user_prompt = TRANSLATION_BATCH_PROMPT_CN["USER_PROMPT_TEMPLATE"].format(
-            target_language=target_language,
+            target_language=self.target_language,
             title=normalize_text(news_item.title or ""),
             abstract=normalize_text(news_item.abstract or ""),
             body=normalize_text(news_item.body or "")
@@ -51,22 +56,20 @@ class Translator:
 
         translated_title, translated_abstract, translated_body = "", "", ""
         if self.model_name == 'deepseek':
-            model_id = "deepseek-chat"
             translated_title, translated_abstract, translated_body = await self.deepseek_translate(
                 system_prompt,
                 user_prompt,
-                model_id = model_id
+                model_id = self.model_id
             )
         elif self.model_name == 'gemini':
             raise NotImplementedError("Gemini 翻译尚未实现")
         elif self.model_name == 'gpt':
             raise NotImplementedError("GPT 翻译尚未实现")
         elif self.model_name == 'qwen':
-            model_id = 'qwen-flash'
             translated_title, translated_abstract, translated_body = await self.deepseek_translate(
                 system_prompt,
                 user_prompt,
-                model_id = model_id
+                model_id = self.model_id
             )
 
         if not translated_title :
@@ -96,17 +99,15 @@ class Translator:
 
         return refined_item
 
-    async def translate_batch(self, news_list: List[NewsItemRawSchema], target_language: str = "zh") -> List[NewsItemRawSchema]:
+    async def translate_batch(self, news_list: List[NewsItemRawSchema]) -> List[NewsItemRawSchema]:
         """
         异步批量翻译，使用 asyncio.gather 并发处理
         """
-        semaphore = asyncio.BoundedSemaphore(5)  # 控制并发数量
-
         async def safe_translate(item):
-            async with semaphore:
+            async with self.semaphore:
                 try:
                     if self.type == "llm":
-                        return await self.llm_translate_async(item, target_language)
+                        return await self.llm_translate_async(item)
                 except Exception as e:
                     print(f"Translation failed for item {item.unique_id}: {e}")
                     return item  # 失败时返回原文，保证流程不中断

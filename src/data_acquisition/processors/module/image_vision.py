@@ -13,7 +13,7 @@ import base64
 
 from core.news_schemas import NewsItemRawSchema
 from src.module.init_client import LLMClientFactory
-from config.prompts import Image_Vision_PROMPT
+from config.prompts import Image_Vision_PROMPT_CN
 
 
 class ImageVision:
@@ -23,18 +23,18 @@ class ImageVision:
     将<attach_n>占位符替换为图片描述
     """
 
-    def __init__(
-        self,
-        model_name: str = "qwen",
-        model_id: str = "qwen-vl-plus",
-        attachments_root: str = "data/attachments",
-        max_concurrent: int = 3
+    def __init__(self,
+        type: str = "llm", model: str = "qwen", model_id: str = "qwen-vl-plus",
+        attachments_root: str = "data/attachments", max_concurrent: int = 5
     ):
-        self.model_name = model_name
+        self.type = type
+        self.model = model
         self.model_id = model_id
         self.attachments_root = Path(attachments_root)
-        self.semaphore = asyncio.Semaphore(max_concurrent)
-        self.llm_client = LLMClientFactory().get_client(model_name)
+        self.semaphore = asyncio.BoundedSemaphore(max_concurrent)
+
+
+        self._client = LLMClientFactory().get_client(self.model)
 
     def _encode_image_to_base64(self, image_path: Path) -> str:
         """将图片编码为base64字符串"""
@@ -56,10 +56,10 @@ class ImageVision:
             image_base64 = self._encode_image_to_base64(image_path)
 
             # 构建提示词
-            prompt = Image_Vision_PROMPT["SYSTEM_PROMPT"]
+            prompt = Image_Vision_PROMPT_CN["SYSTEM_PROMPT"]
 
             # 调用Qwen VL API
-            response = await self.llm_client.chat.completions.create(
+            response = await self._client.chat.completions.create(
                 model=self.model_id,
                 messages=[
                     {
@@ -129,7 +129,7 @@ class ImageVision:
         # 返回修改后的新闻项（body保持不变，只更新attachments）
         return news_item.model_copy(update={"attachments": updated_attachments})
 
-    async def process_batch(self, news_items: List[NewsItemRawSchema]) -> List[NewsItemRawSchema]:
+    async def vision_batch(self, news_items: List[NewsItemRawSchema]) -> List[NewsItemRawSchema]:
         """
         批量处理新闻项
 

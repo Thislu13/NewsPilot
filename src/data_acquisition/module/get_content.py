@@ -31,9 +31,6 @@ def _enrich_single_item(
     return raw_item
 
 
-
-
-
 def _build_domain_batch(
     items: List[NewsItemRawSchema],
     remaining: Set[int],

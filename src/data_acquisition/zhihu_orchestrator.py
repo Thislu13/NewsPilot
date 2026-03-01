@@ -1,23 +1,31 @@
 #
-# Author: Claude Code
-# Date: 2026-02-22
-# Description: 知乎数据编排器 - 遵循 orchestrator.py 的设计模式
+# Author: WangQiushuo 185886867@qq.com
+# Date: 2026-02-27 20:35:02
+# LastEditors: WangQiushuo 185886867@qq.com
+# LastEditTime: 2026-03-01 23:39:57
+# FilePath: \NewsPilot\src\data_acquisition\zhihu_orchestrator.py
+# Description: 
+# 知乎数据编排器 - 遵循 orchestrator.py 的设计模式
+# 
+# Copyright (c) 2026 by , All Rights Reserved. 
+
+
 
 from typing import List
 
-from src.data_acquisition.fetchers.rsshub_fetcher import RSSHubFetcher
-from src.data_acquisition.processors.module.ImageVision import ImageVision
+from src.data_acquisition.fetchers.zhihu_fetcher import Zhihu_RSSHubFetcher
+from data_acquisition.processors.module import ImageVision
 from core.news_schemas import NewsItemRawSchema
 
 
 class ZhihuAcquisitionService:
     """
     知乎抓取服务
-    职责：调用 ZhihuFetcher 抓取原始数据
+    职责：调用 Zhihu_RSSHubFetcher 抓取原始数据
     """
 
     def __init__(self):
-        self.fetcher = RSSHubFetcher(choices=["zhihu_people"], attachment_dir="data/attachments") 
+        self.fetcher = Zhihu_RSSHubFetcher(authors=["mr-dang-77"], attachment_dir="data/attachments") 
 
     async def run(self) -> List[NewsItemRawSchema]:
         """
@@ -34,15 +42,19 @@ class ZhihuProcessingService:
     """
 
     def __init__(
-        self,
-        enable_vision: bool = True,
-        vision_model: str = "qwen-vl-plus"
+        self, enable_vision: bool = True, 
+        type: str = "llm", model: str = "qwen", model_id: str = "qwen-vl-plus",
+        attachments_root = "data/attachments", max_concurrent = 5
     ):
-        self.enable_vision = enable_vision
-        self.vision_model = vision_model
 
         if enable_vision:
-            self.vision_processor = ImageVision(model_name="qwen", model_id=vision_model)
+            self.vision_processor = ImageVision(
+                type=type,
+                model=model,
+                model_id=model_id,
+                attachments_root=attachments_root,
+                max_concurrent=max_concurrent
+            )
         else:
             self.vision_processor = None
 
@@ -51,7 +63,7 @@ class ZhihuProcessingService:
         处理图片，返回处理后的数据列表
         """
         if self.enable_vision and self.vision_processor:
-            processed_items = await self.vision_processor.process_batch(news_list)
+            processed_items = await self.vision_processor.vision_batch(news_list)
             return processed_items
         else:
             return news_list

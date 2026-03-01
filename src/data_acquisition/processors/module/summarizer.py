@@ -2,7 +2,7 @@
 # Author: WangQiushuo 185886867@qq.com
 # Date: 2026-01-09 21:40:37
 # LastEditors: WangQiushuo 185886867@qq.com
-# LastEditTime: 2026-01-31 18:03:59
+# LastEditTime: 2026-03-01 20:57:26
 # FilePath: \NewsPilot\src\data_acquisition\processors\module\summarizer.py
 # Description: 新闻摘要模块 - 使用 LLM 生成摘要
 # 
@@ -22,12 +22,17 @@ from src.module.tools import generate_uuid7
 
 
 class Summarizer:
-    def __init__(self, type: str = "llm", model_name: str = "deepseek"):
+    def __init__(self, 
+                 type: str = "llm", model_name: str = "deepseek", model_id: str = "deepseek-chat",
+                 max_concurrent: int = 5
+        ):
         """
         新闻摘要模块：异步生成摘要，分类，评分
         """
         self.type = type
         self.model_name = model_name
+        self.model_id = model_id
+        self.semaphore = asyncio.BoundedSemaphore(max_concurrent)
 
         if self.type == "llm":
             factory = LLMClientFactory()
@@ -47,11 +52,10 @@ class Summarizer:
 
         abstract, categories, score = "", ["other"], 50
         if self.model_name == 'deepseek':
-            model_id = "deepseek-chat"
             abstract, categories, score = await self.deepseek_refine_classify_score(
                 system_prompt,
                 user_prompt,
-                model_id=model_id,
+                model_id=self.model_id,
             )
         elif self.model_name == 'gemini':
             raise NotImplementedError("Gemini 摘要尚未实现")
@@ -80,9 +84,8 @@ class Summarizer:
 
     async def summarize_batch(self, news_list: List[NewsItemRawSchema]) -> List[NewsItemRefinedSchema]:
         
-        semaphore = asyncio.BoundedSemaphore(5)
         async def safe_summarize(item):
-            async with semaphore:
+            async with self.semaphore:
                 try:
                     if self.type == "llm":
                         return await self.llm_summarize_async(item)

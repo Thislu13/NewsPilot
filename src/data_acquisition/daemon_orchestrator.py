@@ -9,7 +9,6 @@
 # Copyright (c) 2026 by , All Rights Reserved. 
 
 import asyncio
-import logging
 import time
 from typing import List
 
@@ -18,12 +17,10 @@ from src.storage import db_manager, RawNews, RefinedNews, RawNewsStaging, Storag
 from src.data_acquisition.orchestrator import NewsAcquisitionService, NewsProcessingService
 from core.news_schemas import NewsItemRawSchema, NewsItemRefinedSchema
 
-logger = logging.getLogger("DaemonOrchestrator")
-logger.setLevel(logging.INFO)
-logging.basicConfig(
-    format='[%(asctime)s] %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
+from config import settings
+
+from src.logging.logging_config import get_logger
+logger = get_logger("DaemonOrchestrator")
 
 class DaemonOrchestrator:
     """
@@ -34,9 +31,9 @@ class DaemonOrchestrator:
        成功后将数据归档到 RawNews (永久表) 并存入 RefinedNews。
     """
 
-    def __init__(self, fetch_interval: int = 1800, process_interval: int = 5, batch_size: int = 20):
+    def __init__(self, fetch_interval: int = 60*120, process_interval: int = 60, batch_size: int = 20):
         """
-        :param fetch_interval: 抓取间隔（秒），默认 30 分钟。
+        :param fetch_interval: 抓取间隔（秒），默认 120 分钟。
         :param process_interval: 处理轮询间隔（秒），当没有任务时休眠多久。
         :param batch_size: 每次从数据库取多少条进行并发处理。
         """
@@ -46,18 +43,9 @@ class DaemonOrchestrator:
         self.repo = StorageRepository()
 
         # 初始化服务组件
-        self.acquisition_service = NewsAcquisitionService(sources=["newsapi", "rsshub"])  
-        
+        self.acquisition_service = NewsAcquisitionService(sources= settings.NEWS_SOURCES_CONFIG)  
         # 初始化处理管道
-        self.processing_service = NewsProcessingService(
-            translator_flag=True,
-            summarizer_flag=True,
-            embedding_flag=True,
-            target_language='zh',
-            translator_model='qwen',
-            summarizer_model='deepseek',
-            embedding_model='qwen'
-        )
+        self.processing_service = NewsProcessingService(newspilot_config=settings.NewsProcessingPipeline_DEFAULT_CONFIG)
 
     def _ensure_infrastructure(self):
         """确保数据库表存在"""
@@ -176,6 +164,7 @@ class DaemonOrchestrator:
 
                 # 4. 执行 Pipeline (耗时操作)
                 session.close() # 释放连接
+                
                 result_dict = await self.processing_service.run(raw_schemas)
                 
                 # 获取结果
@@ -299,13 +288,3 @@ class DaemonOrchestrator:
             acquisition_loop(),
             self.run_processing_worker()
         )
-
-if __name__ == "__main__":
-    orchestrator = DaemonOrchestrator(
-        fetch_interval=60*60, # 60分钟
-        process_interval=60,   # 60秒轮询
-        batch_size=20         # 每次处理20条
-    )
-    
-    # Windows 下 asyncio 特殊处理
-    asyncio.run(orchestrator.start())

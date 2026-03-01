@@ -1,25 +1,27 @@
 #
-# Author: Claude Code
-# Date: 2026-02-22
-# Description: 知乎守护编排器 - 负责调度抓取和入库
+# Author: WangQiushuo 185886867@qq.com
+# Date: 2026-02-23 19:48:28
+# LastEditors: WangQiushuo 185886867@qq.com
+# LastEditTime: 2026-03-01 23:42:45
+# FilePath: \NewsPilot\src\data_acquisition\zhihu_daemon_orchestrator.py
+# Description: 
+# 知乎数据采集守护进程 - 负责定时抓取指定用户的知乎文章，进行图片理解处理，并存入数据库等待后续分析
+# 
+# Copyright (c) 2026 by , All Rights Reserved. 
+
+
 
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 from typing import List
 
 from src.storage import db_manager, StorageRepository, ZhihuRawPost
 from src.data_acquisition.zhihu_orchestrator import ZhihuAcquisitionService, ZhihuProcessingService
+from src.logging import get_logger
 
-logger = logging.getLogger("ZhihuDaemonOrchestrator")
-logger.setLevel(logging.INFO)
-logging.basicConfig(
-    format='[%(asctime)s] %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
+logger = get_logger("ZhihuDaemonOrchestrator")
 
 class ZhihuDaemonOrchestrator:
     """

@@ -22,15 +22,15 @@ class EmbeddingGenerator:
 
 	def __init__(
 		self,
-		type: str = "llm",
-		model_name: str = "qwen",
-		dimensions: int = 1024,
-		encoding_format: str = "float",
+		type: str = "llm", model_name: str = "qwen", model_id: str = "text-embedding-v4",
+		dimensions: int = 1024, encoding_format: str = "float", max_concurrent: int = 5
 	):
 		self.type = type
 		self.model_name = model_name
+		self.model_id = model_id
 		self.dimensions = dimensions
 		self.encoding_format = encoding_format
+		self.semaphore = asyncio.BoundedSemaphore(max_concurrent)
 
 		if self.type == "llm":
 			factory = LLMClientFactory()
@@ -45,8 +45,7 @@ class EmbeddingGenerator:
 	async def llm_embed_async(self, news_item: NewsItemRefinedSchema) -> NewsItemRefinedSchema:
 		text = news_item.abstract
 		if self.model_name == 'qwen':
-			model_id = "text-embedding-v4"
-			embedding = await self.qwen_embedding(text, model_id=model_id)
+			embedding = await self.qwen_embedding(text, model_id=self.model_id)
 		else:
 			raise ValueError(f"Unsupported embedding model: {self.model_name}")
     
@@ -70,10 +69,9 @@ class EmbeddingGenerator:
 		"""
 		异步批量生成 embedding
 		"""
-		semaphore = asyncio.BoundedSemaphore(5)
 
 		async def safe_embed(item: NewsItemRefinedSchema) -> NewsItemRefinedSchema:
-			async with semaphore:
+			async with self.semaphore:
 				try:
 					if self.type == "llm":
 						return await self.llm_embed_async(item)
