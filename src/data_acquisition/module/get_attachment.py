@@ -19,7 +19,10 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 from core.news_schemas import Attachment, NewsItemRawSchema
-from src.module.tools import extract_host
+from src.module.utils import extract_host
+from src.custom_logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def extract_attachment_urls_from_html(html: str) -> tuple[str, List[Dict[str, Any]]]:
@@ -225,7 +228,7 @@ async def _download_attachment(
         return relative_path
 
     except Exception as e:
-        print(f"[WARN] Download attachment failed: {url} -> {type(e).__name__}: {e!r}")
+        logger.warning(f"Download attachment failed: {url} -> {type(e).__name__}: {e!r}")
         return None
 
 

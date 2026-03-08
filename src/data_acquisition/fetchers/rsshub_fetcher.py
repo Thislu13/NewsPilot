@@ -20,9 +20,12 @@ import feedparser
 
 from src.data_acquisition.fetchers.base_fetcher import BaseFetcher
 from src.data_acquisition.module.get_attachment import extract_attachment_urls_from_html, enrich_attachment
-from src.module.tools import generate_uuid7
+from src.module.utils import generate_uuid7
 from core.news_schemas import NewsItemRawSchema, Attachment
-from config.settings import RSS_CONFIG
+from config import settings
+from src.custom_logging import get_logger
+
+logger = get_logger(__name__)
 
 # from data_acquisition.module.get_content import enrich_full_content
 
@@ -42,7 +45,7 @@ class RSSHubFetcher(BaseFetcher):
     def __init__(
         self,
         rss_url: str="http://localhost:1200",
-        rss_config: Optional[Dict[str, Any]] = RSS_CONFIG,
+        rss_config: Optional[Dict[str, Any]] = settings.RSS_CONFIG,
         choices: List = None,
         attachment_dir: Optional[Path] = None,
     ):
@@ -102,10 +105,10 @@ class RSSHubFetcher(BaseFetcher):
         for source, result in zip(enabled_sources, results):
             if isinstance(result, Exception):
                 # 不中断全局抓取：打印警告并跳过该源
-                print(f"[WARN] RSS entry '{source}' failed: {type(result).__name__}: {result!r}")
+                logger.warning(f"RSS entry '{source}' failed: {type(result).__name__}: {result!r}")
                 continue
             if result is None:
-                print(f"[WARN] RSS entry '{source}' returned None; skipping")
+                logger.warning(f"RSS entry '{source}' returned None; skipping")
                 continue
             articles.extend(result)
 
@@ -485,7 +488,7 @@ class RSSHubFetcher(BaseFetcher):
                 if attempt >= retries:
                     raise
                 sleep_s = min(retry_backoff_base * (2 ** attempt), retry_backoff_cap)
-                print(
+                logger.warning(
                     f"Fetch RSS failed (attempt {attempt + 1}/{retries + 1}) for {rss_url}: "
                     f"{type(e).__name__}: {e!r}; retrying in {sleep_s:.1f}s"
                 )
@@ -534,8 +537,8 @@ class RSSHubFetcher(BaseFetcher):
                 items = await self.fetch_rss_items(rss_url, timeout=timeout)
             except Exception as e:
                 # 某一路由失败不影响整体；按要求返回空值并给出警告
-                print(
-                    f"[WARN] Fetch RSS failed for source={source_name}, url={rss_url}: "
+                logger.warning(
+                    f"Fetch RSS failed for source={source_name}, url={rss_url}: "
                     f"{type(e).__name__}: {e!r}; skipping"
                 )
                 continue

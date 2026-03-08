@@ -17,7 +17,10 @@ from tqdm.asyncio import tqdm_asyncio
 from core.news_schemas import NewsItemRawSchema, NewsItemRefinedSchema
 from src.module.init_client import LLMClientFactory
 from config.prompts import  TRANSLATION_BATCH_PROMPT_CN
-from src.module.tools import normalize_text
+from src.module.utils import normalize_text
+from src.custom_logging import get_logger
+
+logger = get_logger(__name__)
 
 class Translator:
     """
@@ -109,7 +112,7 @@ class Translator:
                     if self.type == "llm":
                         return await self.llm_translate_async(item)
                 except Exception as e:
-                    print(f"Translation failed for item {item.unique_id}: {e}")
+                    logger.error(f"Translation failed for item {item.unique_id}: {e}")
                     return item  # 失败时返回原文，保证流程不中断
 
         tasks = [safe_translate(item) for item in news_list]

@@ -50,8 +50,8 @@ class NewsAnalyzer:
         self.converter = ContentConverter()
 
     async def generate_all_daily_reports(
-        self, 
-        target_date: Optional[datetime.date] = None, 
+        self,
+        target_date: Optional[datetime.date] = None,
         time_range: Optional[tuple[datetime, datetime]] = None,
         # 新增细粒度控制参数
         save_md_list: Optional[List[str]] = "ALL",      # None=不保存, "ALL"=全保存
@@ -59,7 +59,11 @@ class NewsAnalyzer:
         save_pdf_list: Optional[List[str]] = "ALL_CATEGORIES",     # None=不保存, "ALL"=全保存
         md_output_dir: Optional[str] = None,
         html_output_dir: Optional[str] = None,
-        pdf_output_dir: Optional[str] = None
+        pdf_output_dir: Optional[str] = None,
+        # 投资分析参数
+        enable_investment_analysis: bool = False,
+        investment_model: str = "gemini",
+        max_stocks: int = 8
     ) -> Dict[str, Dict[str, str]]:
         """
         核心入口 (V2 重构版)
@@ -181,7 +185,94 @@ class NewsAnalyzer:
             "md_content": total_md,
             **total_paths
         }
-                
+
+        # 5. 生成投资分析并整合 (可选)
+        if enable_investment_analysis:
+            print(f"[*] Step 3: 正在生成投资分析...")
+            try:
+                from pathlib import Path
+                from src.intelligence.investment_analyzer import InvestmentAnalyzer
+                from src.intelligence.renderers.integrated_report import IntegratedReportRenderer
+
+                investment_analyzer = InvestmentAnalyzer(
+                    model_name=investment_model,
+                    workspace=Path.cwd()
+                )
+
+                investment_result = await investment_analyzer.generate_investment_report(
+                    date=display_date.strftime("%Y-%m-%d"),
+                    output_dir=None,  # 不单独保存
+                    max_stocks=max_stocks
+                )
+
+                if "error" not in investment_result:
+                    # 使用IntegratedReportRenderer合并
+                    integrated_md = IntegratedReportRenderer().render(
+                        investment_md=investment_result["report_md"],
+                        total_report_md=total_md,
+                        date=display_date
+                    )
+                    print(f"[*] 投资分析完成，已整合到日报")
+                else:
+                    # 失败时，在Total报告中添加说明
+                    integrated_md = self._add_no_investment_notice(total_md)
+                    print(f"[!] 投资分析失败: {investment_result.get('error')}")
+
+                # 生成HTML
+                integrated_html = self.converter.md_to_html(
+                    integrated_md,
+                    full_page=True,
+                    footer_image_path=pay_img_path
+                )
+
+                # 保存整合版报告
+                integrated_paths = await self._handle_file_saving(
+                    category="integrated",
+                    display_date=display_date,
+                    md_content=integrated_md,
+                    html_content=integrated_html,
+                    save_md_list=save_md_list,
+                    save_html_list=save_html_list if save_html_list != ["total"] else ["integrated"],
+                    save_pdf_list=save_pdf_list,
+                    md_dir=md_output_dir,
+                    html_dir=html_output_dir,
+                    pdf_dir=pdf_output_dir
+                )
+
+                results["integrated"] = {
+                    "investment_data": investment_result,
+                    "md_content": integrated_md,
+                    **integrated_paths
+                }
+
+            except Exception as e:
+                print(f"[!] 投资分析失败（不影响日报生成）: {e}")
+                import traceback
+                traceback.print_exc()
+                # 降级：添加说明
+                integrated_md = self._add_no_investment_notice(total_md)
+                integrated_html = self.converter.md_to_html(
+                    integrated_md,
+                    full_page=True,
+                    footer_image_path=pay_img_path
+                )
+                integrated_paths = await self._handle_file_saving(
+                    category="integrated",
+                    display_date=display_date,
+                    md_content=integrated_md,
+                    html_content=integrated_html,
+                    save_md_list=save_md_list,
+                    save_html_list=save_html_list if save_html_list != ["total"] else ["integrated"],
+                    save_pdf_list=save_pdf_list,
+                    md_dir=md_output_dir,
+                    html_dir=html_output_dir,
+                    pdf_dir=pdf_output_dir
+                )
+                results["integrated"] = {
+                    "md_content": integrated_md,
+                    **integrated_paths
+                }
+
         print(f"[*] 所有报告生成完毕。")
         return results
 
@@ -197,6 +288,8 @@ class NewsAnalyzer:
         cn_name = self.category_map.get(category, category)
         if category == "total":
              cn_name = "0_全领域深度日报_汇总" # 加个前缀让它排第一
+        elif category == "integrated":
+             cn_name = "0_投资版日报_完整版"  # 整合版
             
         # MD
         if self._should_save(category, save_md_list):
@@ -264,6 +357,22 @@ class NewsAnalyzer:
             return await self._call_llm(system_prompt, user_prompt)
         except Exception as e:
             return json.dumps({"error": str(e), "meta": {}})
+
+    def _add_no_investment_notice(self, total_md: str) -> str:
+        """在日报开头添加投资分析说明"""
+        notice = """
+## 📊 投资分析
+
+> 当前市场环境下无明确买入机会，建议观望。
+
+---
+
+"""
+        # 在第一个 --- 后插入说明
+        parts = total_md.split("---\n", 2)
+        if len(parts) >= 2:
+            return parts[0] + "---\n" + notice + parts[1] + ("---\n" + parts[2] if len(parts) > 2 else "")
+        return total_md
 
     # ... _fetch_news 和 _classify_news 保持不变 ...
     def _fetch_news(self, target_date: Optional[datetime.date], time_range: Optional[tuple[datetime, datetime]] = None) -> List[RefinedNews]:

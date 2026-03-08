@@ -17,7 +17,10 @@ import re
 from core.news_schemas import NewsItemRawSchema, NewsItemRefinedSchema
 from src.module.init_client import LLMClientFactory
 from config.prompts import REFINE_CLASSIFY_SCORE_PROMPT_CN
-from src.module.tools import generate_uuid7
+from src.module.utils import generate_uuid7
+from src.custom_logging import get_logger
+
+logger = get_logger(__name__)
     
 
 
@@ -90,7 +93,7 @@ class Summarizer:
                     if self.type == "llm":
                         return await self.llm_summarize_async(item)
                 except Exception as e:
-                    print(f"Summarization failed for item {item.unique_id}: {e}")
+                    logger.error(f"Summarization failed for item {item.unique_id}: {e}")
                     return None  # 失败时返回 None，后续需要清洗掉
 
         tasks = [safe_summarize(item) for item in news_list]

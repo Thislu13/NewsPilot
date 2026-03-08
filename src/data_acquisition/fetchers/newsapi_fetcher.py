@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from newsapi import NewsApiClient
 
 from src.data_acquisition.fetchers.base_fetcher import BaseFetcher
-from src.module.tools import generate_uuid7, extract_host
+from src.module.utils import generate_uuid7, extract_host
 from core.news_schemas import NewsItemRawSchema, Attachment
 
 # from data_acquisition.module.get_content import enrich_full_content

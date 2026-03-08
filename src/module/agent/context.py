@@ -1,198 +1,94 @@
-"""
-Context builder for assembling agent prompts.
-从 nanobot 移植并适配到 NewsPilot
-"""
+#
+# Author: WangQiushuo 185886867@qq.com
+# Date: 2026-03-08 15:52:24
+# LastEditors: WangQiushuo 185886867@qq.com
+# LastEditTime: 2026-03-08 16:44:10
+# FilePath: \NewsPilot\src\module\agent\context.py
+# Description: 
+# 
+# Copyright (c) 2026 by , All Rights Reserved. 
 
-import base64
-import mimetypes
-from datetime import datetime
+"""Context builder for assembling agent prompts."""
+
+import platform
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
 
-from .skills import SkillsLoader
+from .skills.loader import SkillsLoader
 
 
-class AgentContextBuilder:
+class SimpleContextBuilder:
     """
-    Builds the context (system prompt + messages) for the agent.
+    Builds the context (system prompt) for the agent.
 
-    Assembles skills and conversation history into a coherent prompt for the LLM.
+    Assembles skills and identity into a coherent prompt for the LLM.
+    No memory management - designed for stateless single-call execution.
     """
 
-    def __init__(self, skills_dir: Optional[Path] = None):
+    def __init__(self, workspace: Path):
         """
-        Initialize the context builder.
+        Initialize SimpleContextBuilder.
 
         Args:
-            skills_dir: Directory containing skills.
+            workspace: Workspace directory
         """
-        self.skills = SkillsLoader(skills_dir)
+        self.workspace = workspace
+        self.skills = SkillsLoader(workspace)
 
-    def build_system_prompt(
-        self,
-        identity: str,
-        skill_names: Optional[List[str]] = None,
-        additional_context: Optional[str] = None
-    ) -> str:
+    def build_system_prompt(self, skill_names: list[str] | None = None) -> str:
         """
-        Build the system prompt from identity, skills, and additional context.
+        Build the system prompt.
 
         Args:
-            identity: Core identity description for the agent.
-            skill_names: Optional list of skills to include.
-            additional_context: Optional additional context to include.
+            skill_names: Optional list of skills to include
 
         Returns:
-            Complete system prompt.
+            Complete system prompt
         """
         parts = []
 
         # Core identity
-        parts.append(f"# Identity\n\n{identity}")
+        parts.append(self._get_identity())
 
-        # Skills
-        if skill_names:
-            skills_content = self.skills.load_skills_for_context(skill_names)
-            if skills_content:
-                parts.append(f"# Skills\n\n{skills_content}")
+        # Always-loaded skills
+        always_skills = self.skills.get_always_skills()
+        if always_skills:
+            always_content = self.skills.load_skills_for_context(always_skills)
+            if always_content:
+                parts.append(f"# Active Skills\n\n{always_content}")
 
         # Available skills summary
         skills_summary = self.skills.build_skills_summary()
         if skills_summary:
-            parts.append(skills_summary)
+            parts.append(
+                f"""# Skills
 
-        # Additional context
-        if additional_context:
-            parts.append(f"# Additional Context\n\n{additional_context}")
+The following skills extend your capabilities. To use a skill, read its SKILL.md file using the read_file tool.
+
+{skills_summary}"""
+            )
 
         return "\n\n---\n\n".join(parts)
 
-    def build_messages(
-        self,
-        system_prompt: str,
-        history: List[Dict[str, Any]],
-        current_message: str,
-        media: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
-        """
-        Build the complete message list for an LLM call.
+    def _get_identity(self) -> str:
+        """Get the core identity section."""
+        workspace_path = str(self.workspace.expanduser().resolve())
+        system = platform.system()
+        runtime = f"{'macOS' if system == 'Darwin' else system} {platform.machine()}, Python {platform.python_version()}"
 
-        Args:
-            system_prompt: The system prompt.
-            history: Previous conversation messages.
-            current_message: The new user message.
-            media: Optional list of local file paths for images/media.
+        return f"""# Simple Agent 🤖
+You are a helpful AI assistant for single-call execution.
 
-        Returns:
-            List of messages including system prompt.
-        """
-        messages = []
+## Runtime
+{runtime}
 
-        # System prompt
-        messages.append({"role": "system", "content": system_prompt})
+## Workspace
+Your workspace is at: {workspace_path}
+- Custom skills: {workspace_path}/skills/{{skill-name}}/SKILL.md
 
-        # History
-        messages.extend(history)
-
-        # Current message (with optional image attachments)
-        user_content = self._build_user_content(current_message, media)
-        messages.append({"role": "user", "content": user_content})
-
-        return messages
-
-    def _build_user_content(
-        self,
-        text: str,
-        media: Optional[List[str]] = None
-    ) -> Union[str, List[Dict[str, Any]]]:
-        """Build user message content with optional base64-encoded images."""
-        if not media:
-            return text
-
-        images = []
-        for path in media:
-            p = Path(path)
-            mime, _ = mimetypes.guess_type(path)
-            if not p.is_file() or not mime or not mime.startswith("image/"):
-                continue
-            b64 = base64.b64encode(p.read_bytes()).decode()
-            images.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:{mime};base64,{b64}"}
-            })
-
-        if not images:
-            return text
-
-        return images + [{"type": "text", "text": text}]
-
-    def add_tool_result(
-        self,
-        messages: List[Dict[str, Any]],
-        tool_call_id: str,
-        tool_name: str,
-        result: str
-    ) -> List[Dict[str, Any]]:
-        """
-        Add a tool result to the message list.
-
-        Args:
-            messages: Current message list.
-            tool_call_id: ID of the tool call.
-            tool_name: Name of the tool.
-            result: Tool execution result.
-
-        Returns:
-            Updated message list.
-        """
-        messages.append({
-            "role": "tool",
-            "tool_call_id": tool_call_id,
-            "name": tool_name,
-            "content": result
-        })
-        return messages
-
-    def add_assistant_message(
-        self,
-        messages: List[Dict[str, Any]],
-        content: Optional[str] = None,
-        tool_calls: Optional[List[Dict[str, Any]]] = None,
-        reasoning_content: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        """
-        Add an assistant message to the message list.
-
-        Args:
-            messages: Current message list.
-            content: Message content.
-            tool_calls: Optional tool calls.
-            reasoning_content: Thinking output (Kimi, DeepSeek-R1, etc.).
-
-        Returns:
-            Updated message list.
-        """
-        msg: Dict[str, Any] = {"role": "assistant"}
-
-        # Always include content
-        msg["content"] = content
-
-        if tool_calls:
-            msg["tool_calls"] = tool_calls
-
-        # Include reasoning content when provided
-        if reasoning_content is not None:
-            msg["reasoning_content"] = reasoning_content
-
-        messages.append(msg)
-        return messages
-
-    def _get_runtime_context(self) -> str:
-        """Get dynamic runtime context."""
-        now = datetime.now().strftime("%Y-%m-%d %H:%M (%A)")
-        return f"[Runtime Context]\nCurrent Time: {now}"
-
-    def inject_runtime_context(self, message: str) -> str:
-        """Inject runtime context into user message."""
-        runtime = self._get_runtime_context()
-        return f"{message}\n\n{runtime}"
+## Tool Call Guidelines
+- Before calling tools, you may briefly state your intent, but NEVER predict the result before receiving it.
+- Before modifying a file, read it first to confirm its current content.
+- Do not assume a file or directory exists — use list_dir or read_file to verify.
+- After writing or editing a file, re-read it if accuracy matters.
+- If a tool call fails, analyze the error before retrying with a different approach.
+- You can spawn sub-agents using the 'spawn' tool to handle complex subtasks independently."""

@@ -1,10 +1,11 @@
 
 #数据文件
 tools/
+.claude/
 .history/
 data/
 logs/
-src/module/agent/skills
+src/module/agent/skills/value-investment-strategy/
 #密钥文件
 config/keys.py
 #用户画像

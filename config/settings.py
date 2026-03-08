@@ -101,7 +101,8 @@ ZHIHU_RSS_CONFIG = {
             # '/answers/people/mr-dang-77',  # 用户的回答
             # '/people/pins/mr-dang-77',  # 用户的想法
         ]
-    }
+    },
+    'author_list': ['mr-dang-77']
 }
 
 

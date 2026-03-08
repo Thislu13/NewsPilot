@@ -2,7 +2,7 @@
 # Author: WangQiushuo 185886867@qq.com
 # Date: 2026-02-23 19:48:28
 # LastEditors: WangQiushuo 185886867@qq.com
-# LastEditTime: 2026-03-01 23:42:45
+# LastEditTime: 2026-03-02 19:42:44
 # FilePath: \NewsPilot\src\data_acquisition\zhihu_daemon_orchestrator.py
 # Description: 
 # 知乎数据采集守护进程 - 负责定时抓取指定用户的知乎文章，进行图片理解处理，并存入数据库等待后续分析
@@ -19,7 +19,9 @@ from typing import List
 
 from src.storage import db_manager, StorageRepository, ZhihuRawPost
 from src.data_acquisition.zhihu_orchestrator import ZhihuAcquisitionService, ZhihuProcessingService
-from src.logging import get_logger
+from config import settings
+
+from src.custom_logging import get_logger
 
 logger = get_logger("ZhihuDaemonOrchestrator")
 
@@ -36,19 +38,16 @@ class ZhihuDaemonOrchestrator:
     - LLM分析由独立的 Processing Worker 完成
     """
 
-    def __init__(
-        self,
-        fetch_interval: int = 1800,
-        enable_vision: bool = True,
-        vision_model: str = "qwen-vl-plus",
-    ):
+    def __init__(self, fetch_interval: int = 1800, process_interval: int = 60, batch_size: int = 10):
         self.fetch_interval = fetch_interval
+        self.process_interval = process_interval
+        self.batch_size = batch_size
         self.repo = StorageRepository()
-        self.acquisition_service = ZhihuAcquisitionService()
-        self.processing_service = ZhihuProcessingService(
-            enable_vision=enable_vision,
-            vision_model=vision_model
-        )
+
+        # 初始化采集服务
+        self.acquisition_service = ZhihuAcquisitionService(config = settings.ZHIHU_RSS_CONFIG, attachments_root="data/attachments")
+        # 初始化处理服务，传入配置
+        self.processing_service = ZhihuProcessingService()
 
     def _ensure_infrastructure(self):
         """确保数据库表存在"""

@@ -12,9 +12,11 @@ from typing import Optional, List
 from src.data_acquisition.zhihu_daemon_orchestrator import ZhihuDaemonOrchestrator
 from src.storage import db_manager, ZhihuRawPost
 
-from .worker import ZhihuProcessingWorker
-from .utils import ZhihuServiceConfig, is_first_run_complete, mark_first_run_complete
+from src.workflows.zhihu_ananlysis_service import ZhihuProcessingWorker
+from src.workflows.zhihu_ananlysis_service import ZhihuServiceConfig, is_first_run_complete, mark_first_run_complete
+from src.custom_logging import get_logger
 
+logger = get_logger("ZhihuAnalysisService")
 
 class ZhihuAnalysisService:
     """
@@ -36,8 +38,8 @@ class ZhihuAnalysisService:
         # 初始化采集守护进程
         self.daemon = ZhihuDaemonOrchestrator(
             fetch_interval=config.fetch_interval,
-            enable_vision=config.enable_vision,
-            vision_model=config.vision_model
+            process_interval=config.process_interval,
+            batch_size=config.batch_size,
         )
 
         # 将在 run() 方法中创建工作器
@@ -52,21 +54,19 @@ class ZhihuAnalysisService:
         # 初始化数据库表
         db_manager.verify_and_create_tables()
 
-        print(f"\n🚀 知乎分析服务已启动 [PID: {os.getpid()}]")
-        print(f"  📡 采集间隔: {self.config.fetch_interval}秒")
-        print(f"  ⚙️ 处理间隔: {self.config.process_interval}秒")
-        print(f"  📧 邮件: {'已启用' if self.config.enable_email else '已禁用'}")
-        print(f"  🤖 分析模型: {self.config.model_name}")
-        print(f"  👁️ 视觉分析: {'已启用' if self.config.enable_vision else '已禁用'} "
-              f"({self.config.vision_model})")
-        print("  🛑 按 Ctrl+C 停止服务...\n")
+        logger.info(f"\n🚀 知乎分析服务已启动 [PID: {os.getpid()}]")
+        logger.info(f"  📡 采集间隔: {self.config.fetch_interval}秒")
+        logger.info(f"  ⚙️ 处理间隔: {self.config.process_interval}秒")
+        logger.info(f"  📊 批处理大小: {self.config.batch_size}")
+        logger.info(f"  📧 邮件: {'已启用' if self.config.enable_email else '已禁用'}")
+        logger.info("  🛑 按 Ctrl+C 停止服务...\n")
 
         # 处理首次运行初始化
         if not is_first_run_complete():
             await self._run_first_time_bootstrap()
 
         # 启动正常运行模式
-        print("🚀 启动正常操作模式...\n")
+        logger.info("🚀 启动正常操作模式...\n")
         await self._run_normal_mode()
 
     async def _run_first_time_bootstrap(self):
@@ -75,15 +75,15 @@ class ZhihuAnalysisService:
 
         获取初始数据并处理，不发送邮件。
         """
-        print("🔔 检测到首次运行 - 处理历史文章但不发送邮件...")
+        logger.info("🔔 检测到首次运行 - 处理历史文章但不发送邮件...")
 
         # 执行一次采集
         new_ids = await self.daemon.run_acquisition_processing_once()
         if new_ids:
-            print(f"✅ 创建了 {len(new_ids)} 条待处理状态的记录")
+            logger.info(f"✅ 创建了 {len(new_ids)} 条待处理状态的记录")
 
         # 检查待处理数量
-        print("⚙️  处理待处理记录（不发送邮件）...")
+        logger.info("⚙️  处理待处理记录（不发送邮件）...")
         session = db_manager.get_session()
         pending_count = session.query(ZhihuRawPost).filter(
             ZhihuRawPost.status == "pending"
@@ -91,7 +91,7 @@ class ZhihuAnalysisService:
         session.close()
 
         if pending_count > 0:
-            print(f"📋 找到 {pending_count} 条待处理记录...")
+            logger.info(f"📋 找到 {pending_count} 条待处理记录...")
 
             # 创建临时工作器（跳过邮件）
             temp_worker = ZhihuProcessingWorker(
@@ -120,11 +120,11 @@ class ZhihuAnalysisService:
                         pass
                     break
 
-                print(f"⚙️  处理中... 剩余 {remaining} 条")
+                logger.info(f"⚙️  处理中... 剩余 {remaining} 条")
                 await asyncio.sleep(5)
 
         mark_first_run_complete()
-        print("✅ 首次运行已完成。之后的运行将发送邮件通知。\n")
+        logger.info("✅ 首次运行已完成。之后的运行将发送邮件通知。\n")
 
     async def _run_normal_mode(self):
         """

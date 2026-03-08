@@ -12,6 +12,9 @@ from tqdm.asyncio import tqdm_asyncio
 
 from core.news_schemas import NewsItemRefinedSchema
 from src.module.init_client import LLMClientFactory
+from src.custom_logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class EmbeddingGenerator:
@@ -76,7 +79,7 @@ class EmbeddingGenerator:
 					if self.type == "llm":
 						return await self.llm_embed_async(item)
 				except Exception as e:
-					print(f"Embedding failed for item {item.unique_id}: {e}")
+					logger.error(f"Embedding failed for item {item.unique_id}: {e}")
 					return item  # 失败时返回原对象
 
 			return item

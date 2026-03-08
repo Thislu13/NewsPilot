@@ -14,6 +14,9 @@ from typing import Optional, List
 
 from src.distribution.email_sender import send_daily_report_email
 from src.module.content_converter import ContentConverter
+from src.custom_logging import get_logger
+
+logger = get_logger(__name__)
 
 # Markdown 输出目录和首次运行标记文件
 MARKDOWN_DIR = Path("data/zhihu_analysis_md")
@@ -42,12 +45,7 @@ class ZhihuServiceConfig:
             default=60 * 30,
             help="数据采集间隔，默认30分钟"
         )
-        parser.add_argument(
-            "--auther_list",
-            type=str,
-            default="",
-            help="要监控的知乎用户列表，逗号分隔，默认为空表示监控所有用户"
-        )
+
         parser.add_argument(
             "--process_interval",
             type=int,
@@ -60,42 +58,21 @@ class ZhihuServiceConfig:
             default=10,
             help="每批处理的文章数量，默认10"
         )
+
         parser.add_argument(
             "--enable_email",
             type=parse_bool,
             default=True,
             help="是否启用邮件通知，默认启用"
         )
-        parser.add_argument(
-            "--model_name",
-            type=str,
-            default="gemini",
-            help="使用的模型名称，默认gemini"
-        )
-        parser.add_argument(
-            "--enable_vision",
-            type=parse_bool,
-            default=True,
-            help="是否启用视觉分析，默认启用"
-        )
-        parser.add_argument(
-            "--vision_model",
-            type=str,
-            default="qwen-vl-plus",
-            help="使用的视觉模型名称，默认qwen-vl-plus"
-        )
-        args = parser.parse_args()
 
-        auther_list = [a.strip() for a in args.auther_list.split(",") if a.strip()]
+        args = parser.parse_args()
+        
         return ZhihuServiceConfig(
             fetch_interval=args.fetch_interval,
-            auther_list=auther_list or None,
             process_interval=args.process_interval,
             batch_size=args.batch_size,
             enable_email=args.enable_email,
-            model_name=args.model_name,
-            enable_vision=args.enable_vision,
-            vision_model=args.vision_model,
         )
 
 
@@ -118,7 +95,7 @@ def mark_first_run_complete():
     """标记首次运行初始化为已完成。"""
     FIRST_RUN_FLAG.parent.mkdir(parents=True, exist_ok=True)
     FIRST_RUN_FLAG.write_text(datetime.now().isoformat(), encoding="utf-8")
-    print(f"First run completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"First run completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
 def normalize_title_for_filename(title: str) -> str:
@@ -257,9 +234,9 @@ async def send_markdown_email(md_file: Path):
             service_name="zhihu_dang_report"
         )
 
-        print(f"📧 Email sent: {md_file.name}")
+        logger.info(f"📧 Email sent: {md_file.name}")
         return True
 
     except Exception as e:
-        print(f"❌ Failed to send email for {md_file.name}: {e}")
+        logger.error(f"❌ Failed to send email for {md_file.name}: {e}", exc_info=True)
         return False

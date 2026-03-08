@@ -2,7 +2,7 @@
 统一日志配置模块
 
 使用方式：
-    from src.logging.logging_config import get_logger
+    from src.custom_logging.logging_config import get_logger
 
     logger = get_logger(__name__)
     logger.info("服务启动")

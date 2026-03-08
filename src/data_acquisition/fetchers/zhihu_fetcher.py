@@ -2,7 +2,7 @@
 # Author: WangQiushuo 185886867@qq.com
 # Date: 2025-12-23 21:59:45
 # LastEditors: WangQiushuo 185886867@qq.com
-# LastEditTime: 2026-03-01 23:28:04
+# LastEditTime: 2026-03-02 20:14:21
 # FilePath: \NewsPilot\src\data_acquisition\fetchers\zhihu_fetcher.py
 # Description: zhihu RSSHub 订阅源采集器
 # 
@@ -18,11 +18,14 @@ import aiohttp
 import feedparser
 
 
-from config.settings import ZHIHU_RSS_CONFIG
+from config import settings
 from src.data_acquisition.fetchers.base_fetcher import BaseFetcher
 from src.data_acquisition.module.get_attachment import extract_attachment_urls_from_html, enrich_attachment
-from src.module.tools import generate_uuid7
+from src.module.utils import generate_uuid7
 from core.news_schemas import NewsItemRawSchema, Attachment
+from src.custom_logging import get_logger
+
+logger = get_logger(__name__)
 
 # from data_acquisition.module.get_content import enrich_full_content
 
@@ -42,13 +45,12 @@ class Zhihu_RSSHubFetcher(BaseFetcher):
     def __init__(
         self,
         rss_url: str="http://localhost:1200",
-        rss_config: Optional[Dict[str, Any]] = ZHIHU_RSS_CONFIG,
-        authors: List = ['mr-dang-77'],
+        rss_config: Optional[Dict[str, Any]] = settings.ZHIHU_RSS_CONFIG,
         attachment_dir: Optional[Path] = None,
     ):
         self.rss_url = rss_url
-        self.rss_config = rss_config or {}
-        self.authors = authors
+        self.rss_config = rss_config.get("zhihu_people", {})
+        self.authors = rss_config.get("authors", [])
         self.attachment_dir = Path(attachment_dir) if attachment_dir else None
         
 
@@ -89,10 +91,10 @@ class Zhihu_RSSHubFetcher(BaseFetcher):
         for source, result in zip(self.authors, results):
             if isinstance(result, Exception):
                 # 不中断全局抓取：打印警告并跳过该源
-                print(f"[WARN] RSS entry '{source}' failed: {type(result).__name__}: {result!r}")
+                logger.warning(f"RSS entry '{source}' failed: {type(result).__name__}: {result!r}")
                 continue
             if result is None:
-                print(f"[WARN] RSS entry '{source}' returned None; skipping")
+                logger.warning(f"RSS entry '{source}' returned None; skipping")
                 continue
             articles.extend(result)
 
@@ -178,7 +180,7 @@ class Zhihu_RSSHubFetcher(BaseFetcher):
                 if attempt >= retries:
                     raise
                 sleep_s = min(retry_backoff_base * (2 ** attempt), retry_backoff_cap)
-                print(
+                logger.warning(
                     f"Fetch RSS failed (attempt {attempt + 1}/{retries + 1}) for {rss_url}: "
                     f"{type(e).__name__}: {e!r}; retrying in {sleep_s:.1f}s"
                 )
@@ -229,8 +231,8 @@ class Zhihu_RSSHubFetcher(BaseFetcher):
                 items = await self.fetch_rss_items(rss_url, timeout=timeout)
             except Exception as e:
                 # 某一路由失败不影响整体；按要求返回空值并给出警告
-                print(
-                    f"[WARN] Fetch RSS failed for source={source_name}, url={rss_url}: "
+                logger.warning(
+                    f"Fetch RSS failed for source={source_name}, url={rss_url}: "
                     f"{type(e).__name__}: {e!r}; skipping"
                 )
                 continue

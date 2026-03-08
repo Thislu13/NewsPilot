@@ -2,7 +2,7 @@
 # Author: WangQiushuo 185886867@qq.com
 # Date: 2026-01-07 22:40:42
 # LastEditors: WangQiushuo 185886867@qq.com
-# LastEditTime: 2026-03-01 21:58:50
+# LastEditTime: 2026-03-02 20:06:06
 # FilePath: \NewsPilot\src\data_acquisition\orchestrator.py
 # Description: 新闻采集编排器 - 统一管理新闻抓取流程
 # 
@@ -26,17 +26,17 @@ class NewsAcquisitionService:
     统一管理新闻抓取流程
     """
 
-    def __init__(self, sources: dict = settings.NEWS_SOURCES_CONFIG):
+    def __init__(self, config: dict = settings.NEWS_SOURCES_CONFIG, attachments_root: str = "data/attachments"):
 
         self.fetchers = {
             "newsapi": NewsAPIFetcher(api_key=keys.newsapi_api, ),
             "rsshub": RSSHubFetcher(
-                choices=settings.NEWS_SOURCES_CONFIG.get("reuters", {}).get("choice", []),
-                attachment_dir=settings.NewsProcessingPipeline_DEFAULT_CONFIG['image_vision']['attachments_root']
+                choices=config.get("reuters", {}).get("choice", []),
+                attachment_dir=attachments_root
             )
             # "reuters": ReutersFetcher(...),
         }
-        self.sources = sources.keys()
+        self.sources = config.keys()
 
 
     async def run(self) -> List[NewsItemRawSchema]:
@@ -66,8 +66,9 @@ class NewsProcessingService:
 
 
 class NewsDataOrchestrator():
-    def __init__(self, news_config: dict = {}):
+    def __init__(self, news_config: dict = settings.NEWS_SOURCES_CONFIG, attachments_root: str = "data/attachments"):
         self.news_config = news_config
+        self.attachments_root = attachments_root
         self.m_init()
 
     def m_init(self):

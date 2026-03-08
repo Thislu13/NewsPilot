@@ -19,7 +19,7 @@ from core.news_schemas import NewsItemRawSchema, NewsItemRefinedSchema
 
 from config import settings
 
-from src.logging.logging_config import get_logger
+from src.custom_logging.logging_config import get_logger
 logger = get_logger("DaemonOrchestrator")
 
 class DaemonOrchestrator:
@@ -42,9 +42,9 @@ class DaemonOrchestrator:
         self.batch_size = batch_size
         self.repo = StorageRepository()
 
-        # 初始化服务组件
-        self.acquisition_service = NewsAcquisitionService(sources= settings.NEWS_SOURCES_CONFIG)  
-        # 初始化处理管道
+        # 初始化采集服务
+        self.acquisition_service = NewsAcquisitionService(config= settings.NEWS_SOURCES_CONFIG, attachments_root="data/attachments")  
+        # 初始化处理服务，传入配置
         self.processing_service = NewsProcessingService(newspilot_config=settings.NewsProcessingPipeline_DEFAULT_CONFIG)
 
     def _ensure_infrastructure(self):

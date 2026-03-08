@@ -14,7 +14,7 @@ from typing import List, Dict, Any, Set, Tuple
 from core.news_schemas import NewsItemRawSchema
 
 from src.data_acquisition.module.get_article_from_url import fetch_full_article_by_url
-from src.module.tools import extract_host
+from src.module.utils import extract_host
 
 def _enrich_single_item(
     raw_item: NewsItemRawSchema,

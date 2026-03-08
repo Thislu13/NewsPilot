@@ -6,15 +6,14 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import Any
 
 from src.module.init_client import LLMClientFactory
-from config.prompts import ZHIHU_ANALYSIS_PROMPT_CN
+from config.zhihu_user_config import get_author_config
 from google.genai import types
+from src.custom_logging import get_logger
 
-logger = logging.getLogger("ZhihuAnalyzer")
-logger.setLevel(logging.INFO)
+logger = get_logger(__name__)
 
 
 class ZhihuAnalyzer:
@@ -42,7 +41,13 @@ class ZhihuAnalyzer:
             return "gpt-4o-mini"
         return self.model_name
 
-    async def analyze_single(self, title: str, body: str, source_url: str) -> str:
+    async def analyze_single(
+        self,
+        title: str,
+        body: str,
+        source_url: str,
+        author: str = None
+    ) -> str:
         """
         分析单篇知乎文章
 
@@ -50,12 +55,17 @@ class ZhihuAnalyzer:
             title: 文章标题
             body: 文章正文（已经过图片理解处理）
             source_url: 原文链接
+            author: 作者标识符（用于选择对应的prompt）
 
         Returns:
             markdown格式的分析结果
         """
-        system_prompt = ZHIHU_ANALYSIS_PROMPT_CN["SYSTEM_PROMPT"]
-        user_prompt = ZHIHU_ANALYSIS_PROMPT_CN["USER_PROMPT_TEMPLATE"].format(
+        # Get author-specific configuration
+        author_config = get_author_config(author)
+        prompt_config = author_config["prompt"]
+
+        system_prompt = prompt_config["SYSTEM_PROMPT"]
+        user_prompt = prompt_config["USER_PROMPT_TEMPLATE"].format(
             source_url=source_url,
             title=title,
             body=body,

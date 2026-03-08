@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from src.module.tools import generate_uuid7
+from src.module.utils import generate_uuid7
 from src.storage.db_config import db_manager
 from src.storage.models import SubscriptionTarget
 

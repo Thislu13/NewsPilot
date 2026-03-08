@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import List, Optional
 
 from src.intelligence.zhihu_analyzer import ZhihuAnalyzer
-from src.intelligence.renderers import ZhihuDangReportRenderer
+from config.zhihu_user_config import get_author_config
+from src.intelligence.renderers.zhihu_report.renderer_factory import create_renderer
 from src.storage import db_manager, StorageRepository, ZhihuRawPost
-from .utils import (
+from src.workflows.zhihu_ananlysis_service.utils import (
     reconstruct_body_with_captions,
     save_markdown_file,
     save_json_file,
@@ -21,6 +22,9 @@ from .utils import (
     MARKDOWN_DIR,
     FIRST_RUN_FLAG,
 )
+from src.custom_logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class ZhihuProcessingWorker:
@@ -67,7 +71,7 @@ class ZhihuProcessingWorker:
 
         持续轮询待处理文章并分批处理。
         """
-        print(
+        logger.info(
             f"[Processing] Worker started (batch_size={self.batch_size}, "
             f"interval={self.process_interval}s)"
         )
@@ -111,7 +115,7 @@ class ZhihuProcessingWorker:
                             "failed_at": datetime.now().isoformat()
                         }
                     session.commit()
-                    print(
+                    logger.warning(
                         f"[Processing] ⚠️  Marked {len(skip_rows)} items "
                         "as failed (max retries exceeded)"
                     )
@@ -122,7 +126,7 @@ class ZhihuProcessingWorker:
                     await asyncio.sleep(self.process_interval)
                     continue
 
-                print(f"[Processing] Picked up {len(rows)} pending items")
+                logger.info(f"[Processing] Picked up {len(rows)} pending items")
                 processing_ids = [r.unique_id for r in rows]
 
                 # 2. 标记为处理中
@@ -137,6 +141,7 @@ class ZhihuProcessingWorker:
                         "body": reconstruct_body_with_captions(r.body, r.attachments),
                         "source_url": r.source_url,
                         "published_at": r.published_at,
+                        "author": r.author,  # 添加author字段
                     }
                     for r in rows
                 ]
@@ -156,9 +161,9 @@ class ZhihuProcessingWorker:
                 # 记录失败项
                 failed_results = [(rid, err) for rid, ok, _, err in results if not ok]
                 if failed_results:
-                    print("[Processing] ❌ Failed items details:")
+                    logger.error("[Processing] ❌ Failed items details:")
                     for rid, err in failed_results:
-                        print(f"  - {rid}: {err}")
+                        logger.error(f"  - {rid}: {err}")
 
                 # 5. 更新数据库状态
                 session = db_manager.get_session()
@@ -211,7 +216,7 @@ class ZhihuProcessingWorker:
                 session.commit()
                 session.close()
 
-                print(f"[Processing] Completed: {len(success_ids)}, Failed: {len(failed_ids)}")
+                logger.info(f"[Processing] Completed: {len(success_ids)}, Failed: {len(failed_ids)}")
 
                 # 6. 发送邮件通知
                 if self.enable_email and not self.skip_email and success_ids:
@@ -221,7 +226,7 @@ class ZhihuProcessingWorker:
                             await send_markdown_email(Path(md_path))
 
             except Exception as e:
-                print(f"[Processing] Error: {e}")
+                logger.error(f"[Processing] Error: {e}", exc_info=True)
                 if session and session.is_active:
                     session.rollback()
                 # 恢复处理项为待处理
@@ -254,10 +259,17 @@ class ZhihuProcessingWorker:
                 title=row.get("title") or "",
                 body=row.get("body") or "",
                 source_url=row.get("source_url") or "",
+                author=row.get("author"),  # 传递author
             )
 
-            # 2. 渲染为 Markdown
-            renderer = ZhihuDangReportRenderer()
+            # 2. 根据作者选择渲染器
+            author = row.get("author")
+            author_config = get_author_config(author)
+            renderer_class_name = author_config["renderer_class_name"]
+
+            # 创建渲染器实例
+            renderer = create_renderer(renderer_class_name)
+
             markdown = renderer.render(
                 llm_output_json=llm_output,
                 source_url=row.get("source_url") or "",

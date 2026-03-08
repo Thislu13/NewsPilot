@@ -21,21 +21,27 @@ import os
 import sys
 
 from src.data_acquisition.daemon_orchestrator import DaemonOrchestrator
+from src.custom_logging import get_logger, setup_logging
+
+logger = get_logger(__name__)
 
 async def main(fetch_interval=1800, process_interval=10):
     daemon = DaemonOrchestrator(
-        fetch_interval=fetch_interval, 
+        fetch_interval=fetch_interval,
         process_interval=process_interval
     )
-    
-    print(f"\n🚀 NewsPilot Service Started [PID: {os.getpid()}]")
-    print(f"├─ 📡 Auto-Fetch: Every {fetch_interval}s")
-    print(f"├─ ⚙️ Auto-Process: Every {process_interval}s POLLING")
-    print(f"└─ 🛑 Press Ctrl+C to stop...\n")
-    
+
+    logger.info(f"🚀 NewsPilot Service Started [PID: {os.getpid()}]")
+    logger.info(f"├─ 📡 Auto-Fetch: Every {fetch_interval}s")
+    logger.info(f"├─ ⚙️ Auto-Process: Every {process_interval}s POLLING")
+    logger.info(f"└─ 🛑 Press Ctrl+C to stop...")
+
     await daemon.start()
 
 if __name__ == "__main__":
+    # 初始化日志系统
+    setup_logging()
+
     if sys.platform.startswith('win'):
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -46,4 +52,4 @@ if __name__ == "__main__":
             process_interval=60
         ))
     except KeyboardInterrupt:
-        print("\n👋 Service Stopped.")
+        logger.info("👋 Service Stopped.")

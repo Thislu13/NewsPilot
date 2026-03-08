@@ -1,21 +1,45 @@
-"""
-NewsPilot Agent System - 从 nanobot 移植的核心 agent 能力
+"""Simple Agent - Independent single-call agent framework."""
 
-提供可复用的 agent 框架，用于：
-1. 选股建议生成
-2. 投资分析报告
-3. 智能问答
-"""
-
-from .context import AgentContextBuilder
-from .loop import AgentLoop
+from .context import SimpleContextBuilder
+from .providers import LiteLLMProvider, LLMProvider, LLMResponse, ToolCallRequest
+from .simple_agent import SimpleAgent
 from .skills import SkillsLoader
-from .tools import ToolRegistry, BaseTool
+from .tools import (
+    EditFileTool,
+    ExecTool,
+    ListDirTool,
+    ReadFileTool,
+    SpawnTool,
+    Tool,
+    ToolRegistry,
+    WebFetchTool,
+    WebSearchTool,
+    WriteFileTool,
+)
+
+__version__ = "1.0.0"
 
 __all__ = [
-    "AgentContextBuilder",
-    "AgentLoop",
-    "SkillsLoader",
+    # Main agent
+    "SimpleAgent",
+    # Providers
+    "LLMProvider",
+    "LLMResponse",
+    "ToolCallRequest",
+    "LiteLLMProvider",
+    # Tools
+    "Tool",
     "ToolRegistry",
-    "BaseTool",
+    "ReadFileTool",
+    "WriteFileTool",
+    "EditFileTool",
+    "ListDirTool",
+    "ExecTool",
+    "WebSearchTool",
+    "WebFetchTool",
+    "SpawnTool",
+    # Skills
+    "SkillsLoader",
+    # Context
+    "SimpleContextBuilder",
 ]

@@ -16,6 +16,9 @@ if PROJECT_ROOT not in sys.path:
 
 from src.distribution.email_sender import send_daily_report_email
 from src.intelligence.new_analyzer import NewsAnalyzer
+from src.custom_logging import get_logger, setup_logging
+
+logger = get_logger(__name__)
 
 
 def parse_bool(value: str) -> bool:
@@ -40,20 +43,23 @@ async def main(
     save_dir: str,
     report_time: time = time(8, 0),
     enable_email: bool = False,
+    enable_investment: bool = False,
+    investment_model: str = "gemini",
+    max_stocks: int = 8,
 ):
-    print(f"\n[daily_report] starting [model={model_name}]")
+    logger.info(f"[daily_report] starting [model={model_name}]")
     analyzer = NewsAnalyzer(model_name=model_name)
 
     now = datetime.now()
     today_cutoff = datetime.combine(now.date(), report_time)
     if now.time() < report_time:
-        print(
+        logger.info(
             f"[daily_report] early run: now={now.strftime('%H:%M')} < cutoff={report_time.strftime('%H:%M')}"
         )
 
     yesterday_cutoff = today_cutoff - timedelta(days=1)
-    print(f"[daily_report] window: {yesterday_cutoff} -> {today_cutoff}")
-    print(f"[daily_report] output_dir: {save_dir}")
+    logger.info(f"[daily_report] window: {yesterday_cutoff} -> {today_cutoff}")
+    logger.info(f"[daily_report] output_dir: {save_dir}")
 
     save_md_path = os.path.join(save_dir, "markdown")
     save_html_path = os.path.join(save_dir, "html")
@@ -64,38 +70,45 @@ async def main(
             target_date=today_cutoff.date(),
             time_range=(yesterday_cutoff, today_cutoff),
             save_md_list="ALL",
-            save_html_list=["total"],
+            save_html_list=["integrated"] if enable_investment else ["total"],
             save_pdf_list="ALL_CATEGORIES",
             md_output_dir=save_md_path,
             html_output_dir=save_html_path,
             pdf_output_dir=save_pdf_path,
+            enable_investment_analysis=enable_investment,
+            investment_model=investment_model,
+            max_stocks=max_stocks,
         )
-        print("[daily_report] report generation completed.")
+        logger.info("[daily_report] report generation completed.")
 
         if enable_email:
-            print("[daily_report] email distribution enabled.")
-            total_html_path = results.get("total", {}).get("html_path")
+            logger.info("[daily_report] email distribution enabled.")
+
+            # 优先使用整合版
+            if "integrated" in results:
+                html_path = results["integrated"].get("html_path")
+                subject = f"NewsPilot 投资版日报 ({today_cutoff.date()})"
+            else:
+                html_path = results.get("total", {}).get("html_path")
+                subject = f"NewsPilot Daily Report ({today_cutoff.date()})"
+
+            # 附件: 各领域PDF（不包含整合版或total的PDF）
             attachment_paths = []
-            if results.get("total", {}).get("pdf_path"):
-                attachment_paths.append(results["total"]["pdf_path"])
             for cat, res in results.items():
-                if cat == "total":
-                    continue
-                if res.get("pdf_path"):
+                if cat not in ["total", "integrated"] and res.get("pdf_path"):
                     attachment_paths.append(res["pdf_path"])
 
-            subject = f"NewsPilot Daily Report ({today_cutoff.date()})"
-            if total_html_path or attachment_paths:
+            if html_path or attachment_paths:
                 send_daily_report_email(
                     subject=subject,
-                    html_body_path=total_html_path,
+                    html_body_path=html_path,
                     attachment_paths=attachment_paths,
                     service_name="daily_report",
                 )
             else:
-                print("[daily_report] no HTML/PDF generated, skip email.")
+                logger.warning("[daily_report] no HTML/PDF generated, skip email.")
     except Exception as e:
-        print(f"[daily_report] error: {e}")
+        logger.error(f"[daily_report] error: {e}", exc_info=True)
 
 
 async def scheduler(
@@ -103,8 +116,11 @@ async def scheduler(
     model_name: str = "gemini",
     report_time: time = time(8, 0),
     enable_email: bool = False,
+    enable_investment: bool = False,
+    investment_model: str = "gemini",
+    max_stocks: int = 8,
 ):
-    print(
+    logger.info(
         f"[daily_report] scheduler started; report_time={report_time.strftime('%H:%M')}, "
         f"enable_email={enable_email}"
     )
@@ -115,15 +131,18 @@ async def scheduler(
             target_time += timedelta(days=1)
 
         wait_seconds = (target_time - now).total_seconds()
-        print(f"[daily_report] sleeping {wait_seconds:.0f}s until {target_time}")
+        logger.info(f"[daily_report] sleeping {wait_seconds:.0f}s until {target_time}")
         await asyncio.sleep(wait_seconds)
 
-        print(f"[daily_report] triggering scheduled run at {datetime.now()}")
+        logger.info(f"[daily_report] triggering scheduled run at {datetime.now()}")
         await main(
             model_name=model_name,
             save_dir=save_dir,
             report_time=report_time,
             enable_email=enable_email,
+            enable_investment=enable_investment,
+            investment_model=investment_model,
+            max_stocks=max_stocks,
         )
         await asyncio.sleep(60)
 
@@ -138,10 +157,31 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--save-dir",
         default=os.path.join(PROJECT_ROOT, "data", "daily_reports"),
     )
+    # 投资分析参数
+    parser.add_argument(
+        "--enable-investment",
+        type=parse_bool,
+        default=False,
+        help="是否启用投资分析（默认False）"
+    )
+    parser.add_argument(
+        "--investment-model",
+        default="gemini",
+        help="投资分析使用的模型（默认gemini）"
+    )
+    parser.add_argument(
+        "--max-stocks",
+        type=int,
+        default=8,
+        help="最多分析的股票数量（默认8）"
+    )
     return parser
 
 
 if __name__ == "__main__":
+    # 初始化日志系统
+    setup_logging()
+
     if sys.platform.startswith("win"):
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -154,16 +194,22 @@ if __name__ == "__main__":
                     save_dir=args.save_dir,
                     report_time=args.report_time,
                     enable_email=args.enable_email,
+                    enable_investment=args.enable_investment,
+                    investment_model=args.investment_model,
+                    max_stocks=args.max_stocks,
                 )
             )
         else:
             asyncio.run(
                 scheduler(
-                    save_dir=args.save_dir,
                     model_name=args.model_name,
+                    save_dir=args.save_dir,
                     report_time=args.report_time,
                     enable_email=args.enable_email,
+                    enable_investment=args.enable_investment,
+                    investment_model=args.investment_model,
+                    max_stocks=args.max_stocks,
                 )
             )
     except KeyboardInterrupt:
-        print("[daily_report] stopped.")
+        logger.info("[daily_report] stopped.")
