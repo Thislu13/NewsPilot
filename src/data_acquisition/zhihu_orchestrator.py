@@ -2,7 +2,7 @@
 # Author: WangQiushuo 185886867@qq.com
 # Date: 2026-02-27 20:35:02
 # LastEditors: WangQiushuo 185886867@qq.com
-# LastEditTime: 2026-03-02 20:23:40
+# LastEditTime: 2026-03-08 23:41:04
 # FilePath: \NewsPilot\src\data_acquisition\zhihu_orchestrator.py
 # Description: 
 # 知乎数据编排器 - 遵循 orchestrator.py 的设计模式
@@ -14,7 +14,7 @@
 from typing import List
 
 from src.data_acquisition.fetchers.zhihu_fetcher import Zhihu_RSSHubFetcher
-from data_acquisition.processors.module import ImageVision
+from src.data_acquisition.processors.module import ImageVision
 from core.news_schemas import NewsItemRawSchema
 
 from config import settings

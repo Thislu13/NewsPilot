@@ -2,7 +2,7 @@
 # Author: WangQiushuo 185886867@qq.com
 # Date: 2026-02-09 01:19:33
 # LastEditors: WangQiushuo 185886867@qq.com
-# LastEditTime: 2026-03-01 21:48:32
+# LastEditTime: 2026-03-09 00:32:42
 # FilePath: \NewsPilot\config\settings.py
 # Description: 
 # 
@@ -14,7 +14,7 @@ NEWS_SOURCES_CONFIG = {
     "newsapi": {
         'flag': True,
     },
-    "reuters": {
+    "rsshub": {
         'flag': True,
         "choice": ["reuters", "bloomberg", "eastmoney", "cls", "bbc", "ftchinese", "10jqka", "wallstreetcn"]
     }
@@ -87,24 +87,26 @@ RSS_CONFIG = {
         ]
     },
 }
+
 ZHIHU_RSS_CONFIG = {
     # 知乎
     # https://docs.rsshub.app/routes/zhihu
     # 知乎
     # 用户动态（activities）示例：
     # http://localhost:1200/zhihu/people/activities/mr-dang-77
-    'zhihu_people': {
-        'url':'/zhihu',
-        "options":[
-            '/people/activities/',
-            # '/posts/people/mr-dang-77',  # 用户发布的文章
-            # '/answers/people/mr-dang-77',  # 用户的回答
-            # '/people/pins/mr-dang-77',  # 用户的想法
-        ]
+    'sources': {
+        'zhihu_people': {
+            'url': '/zhihu',
+            'options': [
+                '/people/activities/',
+                # '/posts/people/mr-dang-77',  # 用户发布的文章
+                # '/answers/people/mr-dang-77',  # 用户的回答
+                # '/people/pins/mr-dang-77',  # 用户的想法
+            ]
+        }
     },
     'author_list': ['mr-dang-77']
 }
-
 
 
 

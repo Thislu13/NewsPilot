@@ -139,7 +139,7 @@ class NewsProcessingPipeline:
 
         if self.image_vision_flag:
             self.image_vision = ImageVision(
-                model_name=config["image_vision"]["model"],
+                model=config["image_vision"]["model"],
                 model_id=config["image_vision"]["model_id"],
                 attachments_root=config["image_vision"]["attachments_root"],
                 max_concurrent=config["image_vision"]["max_concurrent"]

@@ -49,8 +49,8 @@ class Zhihu_RSSHubFetcher(BaseFetcher):
         attachment_dir: Optional[Path] = None,
     ):
         self.rss_url = rss_url
-        self.rss_config = rss_config.get("zhihu_people", {})
-        self.authors = rss_config.get("authors", [])
+        self.rss_config = rss_config.get("sources", {})
+        self.authors = rss_config.get("author_list", [])
         self.attachment_dir = Path(attachment_dir) if attachment_dir else None
         
 

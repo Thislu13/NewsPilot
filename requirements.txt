@@ -23,8 +23,8 @@ python-dateutil>=2.8.2
 tqdm>=4.66.0
 feedparser>=6.0.10
 markdown>=3.5.0
-
-
+litellm==1.82.0
+akshare==1.18.35
 # LLM clients
 openai>=1.0.0
 google-genai>=0.3.0

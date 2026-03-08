@@ -19,8 +19,8 @@
 import asyncio
 import sys
 
-from .utils import ZhihuServiceConfig
-from .service import ZhihuAnalysisService
+from src.workflows.zhihu_ananlysis_service.utils import ZhihuServiceConfig
+from src.workflows.zhihu_ananlysis_service.service import ZhihuAnalysisService
 from src.custom_logging import get_logger, setup_logging
 
 logger = get_logger(__name__)

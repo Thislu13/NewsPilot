@@ -1,6 +1,6 @@
 
 #数据文件
-tools/
+./tools
 .claude/
 .history/
 data/

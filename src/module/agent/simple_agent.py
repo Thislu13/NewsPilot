@@ -4,11 +4,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-from loguru import logger
+from src.custom_logging import get_logger
+logger = get_logger(__name__)
 
-from src.module.agent.context import SimpleContextBuilder
-from src.module.agent.providers.base import LLMProvider
-from src.module.agent.tools import (
+from .context import SimpleContextBuilder
+from .providers.base import LLMProvider
+from .tools import (
     # EditFileTool,  # 已禁用
     ExecTool,
     ListDirTool,
@@ -51,7 +52,7 @@ class SimpleAgent:
         workspace: Path,
         model: str | None = None,
         max_iterations: int = 40,
-        temperature: float = 0.1,
+        temperature: float = 1.0,
         max_tokens: int = 4096,
         brave_api_key: str | None = None,
         exec_timeout: int = 120,

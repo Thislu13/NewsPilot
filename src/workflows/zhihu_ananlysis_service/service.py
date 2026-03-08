@@ -12,8 +12,8 @@ from typing import Optional, List
 from src.data_acquisition.zhihu_daemon_orchestrator import ZhihuDaemonOrchestrator
 from src.storage import db_manager, ZhihuRawPost
 
-from src.workflows.zhihu_ananlysis_service import ZhihuProcessingWorker
-from src.workflows.zhihu_ananlysis_service import ZhihuServiceConfig, is_first_run_complete, mark_first_run_complete
+from src.workflows.zhihu_ananlysis_service.worker import ZhihuProcessingWorker
+from src.workflows.zhihu_ananlysis_service.utils import ZhihuServiceConfig, is_first_run_complete, mark_first_run_complete
 from src.custom_logging import get_logger
 
 logger = get_logger("ZhihuAnalysisService")
