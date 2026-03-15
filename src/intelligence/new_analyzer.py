@@ -319,13 +319,9 @@ class NewsAnalyzer:
         return False
 
     def _build_path(self, root: str, date: datetime.date, filename: str) -> str:
-        # 如果路径中包含 'test' (不区分大小写)，则视为测试目录，不自动创建日期子文件夹
-        if 'test' in root.lower().split(os.sep): 
-             full_folder = root
-        else:
-            # 默认保持 YYYY-MM-DD 子目录结构
-            date_folder = date.strftime("%Y-%m-%d")
-            full_folder = os.path.join(root, date_folder)
+        # 默认保持 YYYY-MM-DD 子目录结构
+        date_folder = date.strftime("%Y-%m-%d")
+        full_folder = os.path.join(root, date_folder)
             
         os.makedirs(full_folder, exist_ok=True)
         return os.path.join(full_folder, filename)

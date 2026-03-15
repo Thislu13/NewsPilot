@@ -51,7 +51,7 @@ class InvestmentAnalyzer:
             workspace=self.workspace,
             enable_spawn=True,  # 启用 sub-agent 并行分析
             max_iterations=50,  # 增加迭代次数，因为流程更复杂
-            temperature=1.0,  # 降低温度提高稳定性
+            temperature=1.,  # 降低温度提高稳定性
             max_tokens=16384  # 增加 token 限制
         )
 

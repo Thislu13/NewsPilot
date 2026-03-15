@@ -1,7 +1,7 @@
 ---
 name: investment-report-skill
 description: 投资日报生成系统 - 基于每日新闻日报生成投资分析报告
-always: false
+always: true
 ---
 
 # 投资日报生成系统
@@ -59,6 +59,7 @@ always: false
 2. 使用 a_stock_price_history 获取历史价格（最近60天）
 3. 使用 a_stock_technical_indicators 获取技术指标
 4. 如果是资源股/周期股，使用 commodity_futures_basis_overview 查看相关商品
+5. 尽可能多的获取信息，充分分析
 
 5. 应用 value-investment-strategy 的五层分析框架：
 
@@ -69,6 +70,7 @@ always: false
    - 预期收益率（如果推荐买入）
    - 预期股息率
    - 风险等级
+   - 推荐理由（基于分析结果，逻辑上严格遵循value-investment-strategy 的五层分析逻辑）
 
 输出格式：结构化的分析报告
 ```
@@ -81,6 +83,7 @@ always: false
 
 - 如果 sub-agent 建议"持有"或"卖出"，则不纳入最终报告
 - 如果所有股票都不建议买入，则在报告中说明"当前无明确买入机会"
+- 推荐理由部分该部分尊重sub-agent的分析结果，逻辑上严格遵循value-investment-strategy 的五层分析逻辑
 
 ### 第五步：生成最终报告
 
@@ -117,7 +120,7 @@ always: false
 ## 💎 推荐股票列表
 
 ### 1. 华夏银行 (600015)
-**推荐理由**：...
+**推荐理由**：该部分尊重sub-agent的分析结果，逻辑上严格遵循value-investment-strategy 的五层分析逻辑
 **投资建议**：
 - 当前价格：10.50 元
 - 买入区间：9.50 - 10.80 元
@@ -137,6 +140,11 @@ always: false
 3. **质量优先**：宁可少推荐几只股票，也要确保分析质量
 4. **风险意识**：始终保持风险意识，不做过度乐观的预测
 5. **格式稳定**：严格按照模板格式输出，确保报告的可读性和一致性
+6. **禁止私自保存文件**：
+   - **严禁**使用 `exec`、`write_file` 等工具执行任何文件写入操作
+   - 只生成 Markdown 格式的文本内容作为最终输出
+   - 文件保存由调用方（父级 Agent 或外部系统）统一处理
+   - 不要假设文件路径，只关注内容生成
 
 ---
 
