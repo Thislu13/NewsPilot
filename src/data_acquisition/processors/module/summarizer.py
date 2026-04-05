@@ -2,7 +2,7 @@
 # Author: WangQiushuo 185886867@qq.com
 # Date: 2026-01-09 21:40:37
 # LastEditors: WangQiushuo 185886867@qq.com
-# LastEditTime: 2026-03-01 20:57:26
+# LastEditTime: 2026-04-04 14:40:41
 # FilePath: \NewsPilot\src\data_acquisition\processors\module\summarizer.py
 # Description: 新闻摘要模块 - 使用 LLM 生成摘要
 # 
@@ -79,7 +79,6 @@ class Summarizer:
             title=news_item.title,
             abstract=abstract,
             categories=categories,
-            embedding=None, 
             evaluation_score=score,
             extra_data=news_item.extra_data,
         )

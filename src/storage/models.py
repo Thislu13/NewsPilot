@@ -144,7 +144,6 @@ class RefinedNews(Base):
 
     # --- LLM 评估和编码 ---
     evaluation_score = Column(Float, nullable=True)
-    embedding = Column(JSON, nullable=True)
 
     # --- 扩展字段 ---
     extra_data = Column(JSON, nullable=True)

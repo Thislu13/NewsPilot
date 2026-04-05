@@ -133,7 +133,7 @@ NewsProcessingPipeline_DEFAULT_CONFIG = {
         'max_concurrent': 5
     },
     "embedding": {
-        'flag': True,
+        'flag': False,
         'model': "qwen",
         'model_id': "text-embedding-v4",
         'dimensions': 1024,

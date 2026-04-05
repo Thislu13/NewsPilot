@@ -13,7 +13,7 @@ import asyncio
 from typing import List
 
 from core.news_schemas import NewsItemRawSchema, NewsItemRefinedSchema
-from .module import Translator, Summarizer, EmbeddingGenerator, align_news_lists, ImageVision
+from .module import Translator, Summarizer, align_news_lists, ImageVision
 
 
 NewsProcessingPipeline_DEFAULT_CONFIG = {
@@ -38,7 +38,7 @@ NewsProcessingPipeline_DEFAULT_CONFIG = {
         'max_concurrent': 5
     },
     "embedding": {
-        'flag': True,
+        'flag': False,
         'model': "qwen",
         'model_id': "text-embedding-v4",
         'dimensions': 1024,
@@ -100,8 +100,6 @@ class NewsProcessingPipeline:
         if self.summarizer_flag == True:
             # 异步生成摘要
             refined_items = await self.summarizer.summarize_batch(raw_items)
-            if self.embedding_flag == True:
-                refined_items = await self.embedding.embed_batch(refined_items)
             # 对齐翻译和摘要结果，确保顺序和数量一致, 返回的是(aligned_raw, aligned_refined)
             raw_items, refined_items = align_news_lists(raw_items, refined_items)
 
@@ -120,8 +118,6 @@ class NewsProcessingPipeline:
             await self.translator.close()
         if self.summarizer_flag == True:
             await self.summarizer.close()
-        if self.embedding_flag == True:
-            await self.embedding.close()
     
     def _validate_config(self, config: dict):
         """验证配置的有效性"""
@@ -135,7 +131,6 @@ class NewsProcessingPipeline:
         self.image_vision_flag = config["image_vision"]["flag"]
         self.translotor_flag = config["translator"]["flag"]
         self.summarizer_flag = config["summarizer"]["flag"]
-        self.embedding_flag = config["embedding"]["flag"]
 
         if self.image_vision_flag:
             self.image_vision = ImageVision(
@@ -156,12 +151,4 @@ class NewsProcessingPipeline:
                 model_name=config["summarizer"]["model"],
                 model_id=config["summarizer"]["model_id"],
                 max_concurrent=config["summarizer"]["max_concurrent"]
-            )
-        if self.embedding_flag:
-            self.embedding = EmbeddingGenerator(
-                model_name=config["embedding"]["model"],
-                model_id=config["embedding"]["model_id"],
-                dimensions=config["embedding"]["dimensions"],
-                encoding_format=config["embedding"]["encoding_format"],
-                max_concurrent=config["embedding"]["max_concurrent"]
             )

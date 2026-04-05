@@ -223,7 +223,6 @@ class DaemonOrchestrator:
                         abstract=refined_item.abstract,
                         categories=refined_item.categories,
                         evaluation_score=refined_item.evaluation_score,
-                        embedding=refined_item.embedding, 
                         extra_data=refined_item.extra_data
                     ))
                     

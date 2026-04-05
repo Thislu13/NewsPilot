@@ -2,7 +2,7 @@
 # Author: WangQiushuo 185886867@qq.com
 # Date: 2025-12-18 21:15:42
 # LastEditors: WangQiushuo 185886867@qq.com
-# LastEditTime: 2026-01-31 21:36:47
+# LastEditTime: 2026-04-04 14:40:30
 # FilePath: \NewsPilot\core\news_schemas.py
 # Description: 新闻数据结构 Pydantic 模型定义
 # 
@@ -54,7 +54,7 @@ class NewsItemRefinedSchema(BaseModel):
     categories: List[str] = Field(default_factory=list, description="新闻分类标签（例如：'Finance', 'Technology', 'Macro'）。")
 
     # --- LLM 评估和编码 ---
-    embedding: Optional[List[float]] = Field(None, description="新闻内容的向量化表示（Embedding），用于语义去重或检索。")
+    # embedding: Optional[List[float]] = Field(None, description="新闻内容的向量化表示（Embedding），用于语义去重或检索。")
     evaluation_score: Optional[float] = Field(None, description="经模型评估的新闻可信度/重要性评分（0-100）。")
 
     # --- 扩展字段 ---
