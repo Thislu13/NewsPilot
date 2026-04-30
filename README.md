@@ -8,7 +8,9 @@
 [![Docker](https://img.shields.io/badge/Docker-Supported-blue?logo=docker)]()
 [![Model](https://img.shields.io/badge/Powered%20By-LLM-green)]()
 
-**NewsPilot** 是一套基于大语言模型（LLM）的自动化情报分析系统，旨在将海量全球新闻转化为**个性化、可执行的洞察与建议**。它不仅仅是一个新闻整合工具，更是一个能够理解你职业、持仓和兴趣的 7×24h 智能情报助理。
+**NewsPilot** 是一套基于大语言模型（LLM）的自动化情报分析系统，旨在将海量全球新闻转化为**结构化事件图谱、个性化洞察与可执行的建议**。它不仅仅是一个新闻整合工具，更是一个能够理解你职业、持仓和兴趣的 7×24h 智能情报助理。
+
+🔗 **在线体验**: [www.newspilot.cc](https://www.newspilot.cc) — 实时展示 AI 自动构建的全球新闻事件图谱
 
 [English Doc/English README](doc/README_en.md) |
 [📖 架构设计文档 (中文版)](doc/program_introduction_cn.md) |
@@ -28,10 +30,12 @@
 | :--- | :--- | :--- |
 | **🌍 全球采集** | 集成 NewsAPI、RSSHub、Reuters、知乎等多源数据，自动清洗去重。 | `Playwright`, `Feedparser` |
 | **🧠 深度理解** | 内置多模型翻译引擎，自动将外媒新闻转化为中文精要；基于语义的向量化编码。 | `DeepSeek`, `Qwen-Embedding` |
+| **🕸️ 事件图谱** | 从新闻中抽取独立事件，通过 UMAP + HDBSCAN + LLM 智能聚类，构建多层树形事件簇，自动追踪热点演变。 | `UMAP`, `HDBSCAN` |
 | **🎯 双轨情报** | **Track A (通用)**: 每日自动聚合十大板块，生成行业深度研报。<br>**Track B (个性)**: 基于用户画像 (持仓/职业)，检索相关新闻生成专属建议。 | `Gemini-Thinking` |
 | **🤖 Agent 投资分析** | 基于 SimpleAgent + Skill 架构，使用"五层价值投资框架"自动生成投资日报。 | `LiteLLM`, `akshare` |
 | **📊 知乎热点追踪** | 自动采集知乎热门内容，生成结构化热点分析报告。 | `ZhihuFetcher` |
 | **📧 订阅分发** | 支持邮件分发，内置订阅管理后台，动态配置接收者和报告类型。 | `SMTP`, `HTTP Server` |
+| **☁️ 远程同步** | 本地事件图谱自动同步到远程服务器，驱动 www.newspilot.cc 前端实时展示。 | `pg_dump`, `SCP` |
 
 ---
 
@@ -82,6 +86,7 @@ docker-compose -f config/docker/docker-compose_rsshub_win.yml up -d
 | **统一入口** | `python -m src.workflows.run_service` | 读取 `config/workflow_service.json`，按配置启动 `news` 或 `zhihu_analysis` 服务。 |
 | **新闻采集服务** | `python -m src.workflows.run_news_service` | **[推荐]** 生产模式。后台驻留，每120分钟轮询采集、清洗入库。 |
 | **知乎采集服务** | `python -m src.workflows.zhihu_ananlysis_service.run_zhihu_analysis_service` | 知乎内容采集与分析服务。 |
+| **事件图谱服务** | `python -m src.workflows.run_graph_service` | 启动建图守护进程，定点执行事件聚类、描述更新与远程同步。 |
 | **通用日报** | `python -m src.workflows.run_daily_report` | 手动/定时触发。分析当日新闻，生成通用行业日报。 |
 | **投资日报** | `python -m src.workflows.run_investment_report --date 2026-03-15` | 基于价值投资框架生成投资分析报告。 |
 | **个性化洞察** | `python -m src.workflows.main_pipeline` | 读取 `user_profile.json`，生成针对个人的投资与行动建议。 |
@@ -110,16 +115,25 @@ docker-compose -f config/docker/docker-compose_rsshub_win.yml up -d
 │  │  • 价值投资五层框架 (value-investment-strategy)        │  │
 │  └───────────────────────────────────────────────────────┘  │
 ├─────────────────────────────────────────────────────────────┤
+│                    [图谱层] 事件理解与聚类                     │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │              Event Graph (事件图谱)                    │  │
+│  │  • 事件抽取 (EventExtractor)                           │  │
+│  │  • 智能聚类 (UMAP + HDBSCAN + LLM)                     │  │
+│  │  • 树形簇结构 (EventCluster)                           │  │
+│  │  • 每日/每周描述自动更新                                │  │
+│  └───────────────────────────────────────────────────────┘  │
+├─────────────────────────────────────────────────────────────┤
 │                    [数据层] 采集与处理                        │
 │  ┌──────────────┐ ┌──────────────┐ ┌──────────────────────┐ │
 │  │   Fetchers   │ │  Processors  │ │      Storage         │ │
 │  │  (多源采集)   │ │ (清洗/翻译/  │ │   (PostgreSQL +      │ │
-│  │              │ │  摘要/向量)   │ │    pgvector)         │ │
+│  │              │ │  摘要/事件)   │ │    pgvector)         │ │
 │  └──────────────┘ └──────────────┘ └──────────────────────┘ │
 ├─────────────────────────────────────────────────────────────┤
 │                    [基础设施] 管理与分发                      │
 │  ┌──────────────┐ ┌──────────────┐ ┌──────────────────────┐ │
-│  │ 订阅管理后台  │ │   邮件分发    │ │   知乎采集服务        │ │
+│  │ 订阅管理后台  │ │   邮件分发    │ │   知乎/图谱服务       │ │
 │  └──────────────┘ └──────────────┘ └──────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -134,20 +148,59 @@ docker-compose -f config/docker/docker-compose_rsshub_win.yml up -d
     - 🧹 **清洗**: 去除广告、标准化格式
     - 🔄 **翻译**: 调用 DeepSeek/GPT 将外文互译
     - 📝 **摘要**: 提取核心事实，去除冗余
-    - 🔢 **向量化**: 使用 Qwen-Embedding 将新闻转为向量
+    - 🕸️ **事件抽取**: 使用 LLM 从新闻中提取独立事件并生成 embedding
 
-#### Step 2: 智能分析 (Intelligence)
+#### Step 2: 事件图谱 (Event Graph)
+> 理解新闻背后的真实世界
+
+- **建图守护进程**: `GraphDaemon` 定点调度（UTC 0/6/12/18 点）
+- **事件入库**: 事件匹配 → 智能聚类 (`UMAP` + `HDBSCAN`) → LLM 审核归属 → 簇分裂/合并
+- **描述更新**: 每日自动更新 `recent_description`，每周日执行全量 `weekly_description` + `detailed_description` 更新
+- **远程同步**: 自动推送至远程服务器，驱动前端展示
+
+#### Step 3: 智能分析 (Intelligence)
 > 当你需要情报时，大脑开始工作
 
 - **通用日报**: `NewsAnalyzer` 提取最近 24h 新闻 → 按板块聚类 → 专家模型分析 → 输出 Markdown 日报
 - **投资分析**: `InvestmentAnalyzer` → `SimpleAgent` + `investment-report-skill` → 五层价值投资框架 → 输出投资日报
 - **个性洞察**: `InsightGenerator` 读取用户画像 → 检索强相关新闻 → 生成"机会/风险"评估
 
-#### Step 3: 分发与管理 (Distribution)
+#### Step 4: 分发与展示 (Distribution)
 > 让情报触达用户
 
 - **订阅管理**: Web 后台管理订阅者、报告类型、生效时间
 - **邮件推送**: 支持 SMTP 邮件分发，动态读取订阅列表
+- **在线展示**: [www.newspilot.cc](https://www.newspilot.cc) 实时展示事件图谱的新信号与热点追踪
+
+---
+
+## 🕸️ 事件图谱系统
+
+NewsPilot 引入了全新的 **Event Graph** 架构，将海量新闻转化为结构化、可追踪的事件网络：
+
+### 核心特性
+
+- **事件级抽取**: 从单条新闻中提取多条独立事件，而非整篇向量化
+- **智能聚类**: `UMAP`(768D→30D) + `HDBSCAN` 自动发现事件簇，LLM 审核归属
+- **树形层级**: 支持多层簇结构 (`depth`)，大簇自动分裂为子话题
+- **动态描述**: 每日自动更新簇的近期描述，每周生成周度综述与详细分析
+- **远程同步**: 本地 PostgreSQL 自动同步至远程，驱动 Web 前端实时展示
+
+### 数据库表结构
+
+| 表名 | 说明 |
+|------|------|
+| `candidate_events` | 待处理事件队列 |
+| `processed_events` | 已归簇事件（含 embedding） |
+| `event_clusters` | 事件簇（树形结构，含 centroid、描述字段） |
+| `event_membership` | 事件-簇多对多关系 |
+
+### 使用示例
+
+```bash
+# 启动事件图谱守护进程（定点建图 + 周日定期更新）
+python -m src.workflows.run_graph_service
+```
 
 ---
 

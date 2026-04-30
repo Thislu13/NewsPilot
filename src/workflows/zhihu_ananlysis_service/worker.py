@@ -6,7 +6,7 @@
 """
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -112,7 +112,7 @@ class ZhihuProcessingWorker:
                         r.extra_data = {
                             **(r.extra_data or {}),
                             "failed_reason": "Max retries exceeded",
-                            "failed_at": datetime.now().isoformat()
+                            "failed_at": datetime.now(timezone.utc).isoformat()
                         }
                     session.commit()
                     logger.warning(
@@ -184,7 +184,7 @@ class ZhihuProcessingWorker:
                             fresh.extra_data = {
                                 **(fresh.extra_data or {}),
                                 "analysis_markdown_path": md_path,
-                                "analysis_saved_at": datetime.now().isoformat(),
+                                "analysis_saved_at": datetime.now(timezone.utc).isoformat(),
                             }
 
                 failed_ids = set(processing_ids) - set(success_ids)
@@ -203,7 +203,7 @@ class ZhihuProcessingWorker:
                             **(row.extra_data or {}),
                             "retry_count": retry_count + 1,
                             "last_error": failed_errors.get(row.unique_id, "Unknown error"),
-                            "last_retry_at": datetime.now().isoformat()
+                            "last_retry_at": datetime.now(timezone.utc).isoformat()
                         }
 
                     # 标记为待重试

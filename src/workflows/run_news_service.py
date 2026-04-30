@@ -21,22 +21,32 @@ import os
 import sys
 
 from src.data_acquisition.daemon_orchestrator import DaemonOrchestrator
+from src.graph.daemon import GraphDaemon
+from src.storage.graph_repository import init_graph_extensions
 from src.custom_logging import get_logger, setup_logging
 
 logger = get_logger(__name__)
 
 async def main(fetch_interval=1800, process_interval=10):
+    # 初始化 pgvector 扩展
+    init_graph_extensions()
+
     daemon = DaemonOrchestrator(
         fetch_interval=fetch_interval,
         process_interval=process_interval
     )
+    graph_daemon = GraphDaemon()
 
     logger.info(f"🚀 NewsPilot Service Started [PID: {os.getpid()}]")
     logger.info(f"├─ 📡 Auto-Fetch: Every {fetch_interval}s")
     logger.info(f"├─ ⚙️ Auto-Process: Every {process_interval}s POLLING")
+    logger.info(f"├─ 🕸️ Graph Daemon: UTC {graph_daemon.ingest_hours}")
     logger.info(f"└─ 🛑 Press Ctrl+C to stop...")
 
-    await daemon.start()
+    await asyncio.gather(
+        daemon.start(),
+        graph_daemon.run(),
+    )
 
 if __name__ == "__main__":
     # 初始化日志系统

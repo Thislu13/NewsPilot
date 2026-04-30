@@ -25,8 +25,8 @@ logger = get_logger(__name__)
 
 
 class Summarizer:
-    def __init__(self, 
-                 type: str = "llm", model_name: str = "deepseek", model_id: str = "deepseek-chat",
+    def __init__(self,
+                 type: str = "llm", model_name: str = "qwen", model_id: str = "qwen-flash",
                  max_concurrent: int = 5
         ):
         """
@@ -54,8 +54,8 @@ class Summarizer:
         )
 
         abstract, categories, score = "", ["other"], 50
-        if self.model_name == 'deepseek':
-            abstract, categories, score = await self.deepseek_refine_classify_score(
+        if self.model_name in ('qwen', 'deepseek'):
+            abstract, categories, score = await self._llm_refine_classify_score(
                 system_prompt,
                 user_prompt,
                 model_id=self.model_id,
@@ -183,15 +183,15 @@ class Summarizer:
 
         return True, ""
 
-    async def deepseek_refine_classify_score(
+    async def _llm_refine_classify_score(
         self,
         system_prompt: str,
         user_prompt: str,
-        model_id: str = "deepseek-chat",
+        model_id: str = "qwen-flash",
     ) -> Tuple[str, List[str], int]:
         last_content = ""
         last_error = ""
-        for _ in range(2):
+        for _ in range(3):
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},

@@ -58,8 +58,8 @@ class Translator:
         )
 
         translated_title, translated_abstract, translated_body = "", "", ""
-        if self.model_name == 'deepseek':
-            translated_title, translated_abstract, translated_body = await self.deepseek_translate(
+        if self.model_name in ('qwen', 'deepseek'):
+            translated_title, translated_abstract, translated_body = await self._llm_translate(
                 system_prompt,
                 user_prompt,
                 model_id = self.model_id
@@ -68,12 +68,6 @@ class Translator:
             raise NotImplementedError("Gemini 翻译尚未实现")
         elif self.model_name == 'gpt':
             raise NotImplementedError("GPT 翻译尚未实现")
-        elif self.model_name == 'qwen':
-            translated_title, translated_abstract, translated_body = await self.deepseek_translate(
-                system_prompt,
-                user_prompt,
-                model_id = self.model_id
-            )
 
         if not translated_title :
             translated_title = news_item.title or ""
@@ -136,7 +130,7 @@ class Translator:
             return False, "输出不是字典类型"
         return True, ""
 
-    async def deepseek_translate(
+    async def _llm_translate(
         self,
         system_prompt: str,
         user_prompt: str,
@@ -144,7 +138,7 @@ class Translator:
     ) -> Tuple[str, str, str]:
         last_content = ""
         last_error = ""
-        for _ in range(2):
+        for _ in range(3):
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},

@@ -13,3 +13,4 @@ config/user_profile.json
 distribution/email_config.py
 *.pyc
 __pycache__/
+*.sh

@@ -4,6 +4,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Integer,
     JSON,
     String,
     Text,
@@ -11,6 +12,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import func
+from pgvector.sqlalchemy import Vector
 
 Base = declarative_base()
 
@@ -244,3 +246,88 @@ class SubscriptionTarget(Base):
             f"<SubscriptionTarget(id={self.id}, channel_type={self.channel_type}, "
             f"report_key={self.report_key}, account={self.account})>"
         )
+
+
+# ============================================================
+# 建图相关表
+# ============================================================
+
+class CandidateEvent(Base):
+    """事件待处理队列（从 refined_news 提取的事件）"""
+    __tablename__ = "candidate_events"
+
+    event_id = Column(String(36), primary_key=True)
+    source_news_id = Column(Text, nullable=False)
+    source_channel = Column(Text)
+    source_url = Column(Text)
+    categories = Column(JSON)
+    event_text = Column(Text)
+    embedding = Column(Vector(768))
+    published_at = Column(DateTime(timezone=True))
+    fetched_at = Column(DateTime(timezone=True))
+    status = Column(String(20), default="pending", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<CandidateEvent(event_id={self.event_id}, status={self.status})>"
+
+
+class ProcessedEvent(Base):
+    """已归簇事件"""
+    __tablename__ = "processed_events"
+
+    event_id = Column(String(36), primary_key=True)
+    source_news_id = Column(Text, nullable=False)
+    source_channel = Column(Text)
+    source_url = Column(Text)
+    categories = Column(JSON)
+    event_text = Column(Text)
+    embedding = Column(Vector(768))
+    published_at = Column(DateTime(timezone=True))
+    fetched_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<ProcessedEvent(event_id={self.event_id})>"
+
+
+class EventCluster(Base):
+    """事件簇（树形结构）"""
+    __tablename__ = "event_clusters"
+
+    cluster_id = Column(String(36), primary_key=True)
+    parent_cluster_id = Column(String(36), ForeignKey("event_clusters.cluster_id"), nullable=True)
+    centroid = Column(Vector(768))
+    child_cluster_ids = Column(JSON, default=list)
+    depth = Column(Integer, default=0)
+    dirty = Column(Boolean, default=True)
+    splittable = Column(Boolean, default=True)
+    brief_description = Column(Text)
+    detailed_description = Column(Text)
+    weekly_description = Column(Text)
+    recent_description = Column(Text)
+    status = Column(String(20), default="active")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+    description_updated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<EventCluster(cluster_id={self.cluster_id}, depth={self.depth})>"
+
+
+class EventMembership(Base):
+    """事件-簇多对多关系"""
+    __tablename__ = "event_membership"
+    __table_args__ = (
+        UniqueConstraint("event_id", "cluster_id", name="uq_event_cluster"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_id = Column(String(36), nullable=False, index=True)
+    cluster_id = Column(String(36), ForeignKey("event_clusters.cluster_id"), nullable=False, index=True)
+    sim_score = Column(Float)
+    checked = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<EventMembership(event={self.event_id}, cluster={self.cluster_id})>"

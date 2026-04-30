@@ -10,7 +10,9 @@
 
 > ⚠️ **Note**: This documentation is translated from the Chinese version. In case of any discrepancy, the [Simplified Chinese version](../README.md) shall prevail.
 
-**NewsPilot** is an automated intelligence analysis system based on Large Language Models (LLM), designed to transform massive global news into **personalized, actionable insights**. It is not just a news aggregation tool, but a 24/7 intelligent intelligence assistant that understands your profession, holdings, and interests.
+**NewsPilot** is an automated intelligence analysis system based on Large Language Models (LLM), designed to transform massive global news into **structured event graphs, personalized insights, and actionable recommendations**. It is not just a news aggregation tool, but a 24/7 intelligent intelligence assistant that understands your profession, holdings, and interests.
+
+🔗 **Live Demo**: [www.newspilot.cc](https://www.newspilot.cc) — Real-time global news event graph built by AI
 
 [Simplified Chinese/简体中文](../README.md) |
 [📖 Architecture Documentation (English)](program_introduction_en.md) |
@@ -30,10 +32,12 @@
 | :--- | :--- | :--- |
 | **🌍 Global Acquisition** | Integrates multi-source data from NewsAPI, RSSHub, Reuters, Zhihu, with automatic cleaning and deduplication. | `Playwright`, `Feedparser` |
 | **🧠 Deep Understanding** | Built-in multi-model translation engine, automatically converting foreign news into concise summaries; semantic-based vector encoding. | `DeepSeek`, `Qwen-Embedding` |
+| **🕸️ Event Graph** | Extracts independent events from news, builds multi-level tree-like event clusters via UMAP + HDBSCAN + LLM, automatically tracks hotspot evolution. | `UMAP`, `HDBSCAN` |
 | **🎯 Dual-Track Intel** | **Track A (General)**: Automatically aggregates top 10 sectors daily, generating in-depth industry reports.<br>**Track B (Personalized)**: Based on user profiles (Holdings/Profession), retrieves relevant news to generate exclusive suggestions. | `Gemini-Thinking` |
 | **🤖 Agent Investment Analysis** | Based on SimpleAgent + Skill architecture, using "Five-Layer Value Investment Framework" to automatically generate investment daily reports. | `LiteLLM`, `akshare` |
 | **📊 Zhihu Hot Topics** | Automatically acquires Zhihu trending content and generates structured hotspot analysis reports. | `ZhihuFetcher` |
 | **📧 Subscription Distribution** | Supports email distribution with built-in subscription management backend for dynamic configuration of recipients and report types. | `SMTP`, `HTTP Server` |
+| **☁️ Remote Sync** | Auto-syncs local event graph to remote server, driving www.newspilot.cc frontend in real-time. | `pg_dump`, `SCP` |
 
 ---
 
@@ -84,6 +88,7 @@ docker-compose -f config/docker/docker-compose_rsshub_win.yml up -d
 | **Unified Entry** | `python -m src.workflows.run_service` | Reads `config/workflow_service.json`, starts `news` or `zhihu_analysis` service. |
 | **News Service** | `python -m src.workflows.run_news_service` | **[Recommended]** Production mode. Runs in background, polls collection every 120 mins, cleans and stores data. |
 | **Zhihu Service** | `python -m src.workflows.zhihu_ananlysis_service.run_zhihu_analysis_service` | Zhihu content acquisition and analysis service. |
+| **Event Graph Service** | `python -m src.workflows.run_graph_service` | Starts graph daemon for scheduled event clustering, description updates, and remote sync. |
 | **General Report** | `python -m src.workflows.run_daily_report` | Manual/Scheduled trigger. Analyzes daily news, generates general industry daily reports. |
 | **Investment Report** | `python -m src.workflows.run_investment_report --date 2026-03-15` | Generates investment analysis reports based on value investment framework. |
 | **Personal Insight** | `python -m src.workflows.main_pipeline` | Reads `user_profile.json`, generates personalized investment and action suggestions. |
@@ -111,17 +116,26 @@ docker-compose -f config/docker/docker-compose_rsshub_win.yml up -d
 │  │  • Value Investment Five-Layer Framework              │  │
 │  └───────────────────────────────────────────────────────┘  │
 ├─────────────────────────────────────────────────────────────┤
+│                    [Graph Layer]                            │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │              Event Graph                               │  │
+│  │  • Event Extraction (EventExtractor)                  │  │
+│  │  • Smart Clustering (UMAP + HDBSCAN + LLM)            │  │
+│  │  • Tree Cluster Structure (EventCluster)              │  │
+│  │  • Daily/Weekly Description Auto-Update               │  │
+│  └───────────────────────────────────────────────────────┘  │
+├─────────────────────────────────────────────────────────────┤
 │                    [Data Layer]                             │
 │  ┌──────────────┐ ┌──────────────┐ ┌──────────────────────┐ │
 │  │   Fetchers   │ │  Processors  │ │      Storage         │ │
 │  │  (Multi-src) │ │ (Clean/Trans │ │   (PostgreSQL +      │ │
-│  │              │ │ /Sum/Embed)  │ │    pgvector)         │ │
+│  │              │ │ /Sum/Event)  │ │    pgvector)         │ │
 │  └──────────────┘ └──────────────┘ └──────────────────────┘ │
 ├─────────────────────────────────────────────────────────────┤
 │                    [Infrastructure]                         │
 │  ┌──────────────┐ ┌──────────────┐ ┌──────────────────────┐ │
-│  │ Subscription │ │   Email      │ │   Zhihu Service      │ │
-│  │ Admin Backend│ │ Distribution │ │                      │ │
+│  │ Subscription │ │   Email      │ │   Zhihu/Graph        │ │
+│  │ Admin Backend│ │ Distribution │ │   Service            │ │
 │  └──────────────┘ └──────────────┘ └──────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -136,20 +150,59 @@ docker-compose -f config/docker/docker-compose_rsshub_win.yml up -d
     - 🧹 **Cleaning**: Removes ads, standardizes format
     - 🔄 **Translation**: Calls DeepSeek/GPT to translate foreign texts
     - 📝 **Summarization**: Extracts core facts, removes redundancy
-    - 🔢 **Vectorization**: Uses Qwen-Embedding to convert news into vectors
+    - 🕸️ **Event Extraction**: Uses LLM to extract independent events from news and generate embeddings
 
-#### Step 2: Intelligence Analysis
+#### Step 2: Event Graph
+> Understanding the real world behind the news
+
+- **Graph Daemon**: `GraphDaemon` scheduled runs (UTC 0/6/12/18)
+- **Event Ingestion**: Event matching → Smart clustering (`UMAP` + `HDBSCAN`) → LLM membership review → Cluster split/merge
+- **Description Updates**: Daily auto-update of `recent_description`, weekly full update of `weekly_description` + `detailed_description`
+- **Remote Sync**: Auto-push to remote server, driving frontend display
+
+#### Step 3: Intelligence Analysis
 > When you need intelligence, the brain starts working
 
 - **General Daily**: `NewsAnalyzer` extracts recent 24h news → Clusters by sector → Expert Model analysis → Outputs Markdown Daily Report
 - **Investment Analysis**: `InvestmentAnalyzer` → `SimpleAgent` + `investment-report-skill` → Five-Layer Value Investment Framework → Outputs Investment Report
 - **Personal Insights**: `InsightGenerator` reads your profile → Retrieves strong relevant news → Generates "Opportunity/Risk" assessment
 
-#### Step 3: Distribution & Management
+#### Step 4: Distribution & Display
 > Deliver intelligence to users
 
 - **Subscription Management**: Web backend for managing subscribers, report types, and active periods
 - **Email Distribution**: Supports SMTP email distribution with dynamic subscription list reading
+- **Online Display**: [www.newspilot.cc](https://www.newspilot.cc) displays new signals and hot topics from the event graph in real-time
+
+---
+
+## 🕸️ Event Graph System
+
+NewsPilot introduces a brand-new **Event Graph** architecture that transforms massive news into structured, traceable event networks:
+
+### Key Features
+
+- **Event-Level Extraction**: Extracts multiple independent events from a single news article, rather than embedding the whole article
+- **Smart Clustering**: `UMAP` (768D→30D) + `HDBSCAN` auto-discovers event clusters, with LLM membership review
+- **Tree Hierarchy**: Supports multi-level cluster structures (`depth`), large clusters auto-split into sub-topics
+- **Dynamic Descriptions**: Daily auto-update of cluster recent descriptions, weekly generation of weekly summaries and detailed analysis
+- **Remote Sync**: Local PostgreSQL auto-syncs to remote, driving Web frontend real-time display
+
+### Database Schema
+
+| Table | Description |
+|------|-------------|
+| `candidate_events` | Pending event queue |
+| `processed_events` | Clustered events (with embedding) |
+| `event_clusters` | Event clusters (tree structure, with centroid & descriptions) |
+| `event_membership` | Event-cluster many-to-many relationship |
+
+### Usage Example
+
+```bash
+# Start the event graph daemon (scheduled ingestion + weekly updates)
+python -m src.workflows.run_graph_service
+```
 
 ---
 

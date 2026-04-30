@@ -26,17 +26,17 @@ class NewsAcquisitionService:
     统一管理新闻抓取流程
     """
 
-    def __init__(self, config: dict = settings.NEWS_SOURCES_CONFIG, attachments_root: str = "data/attachments"):
+    def __init__(self, config: dict = settings.NEWS_SOURCES_CONFIG, attachments_root: str = None):
 
         self.fetchers = {
-            "newsapi": NewsAPIFetcher(api_key=keys.newsapi_api, ),
+            "newsapi": NewsAPIFetcher(api_key=keys.newsapi_api, ) if config.get("newsapi", {}).get("flag", False) else None,
             "rsshub": RSSHubFetcher(
-                choices=config.get("reuters", {}).get("choice", []),
+                choices=config.get("rsshub", {}).get("choice", []),
                 attachment_dir=attachments_root
             )
             # "reuters": ReutersFetcher(...),
         }
-        self.sources = config.keys()
+        self.sources = [k for k in config.keys() if config.get(k, {}).get("flag", True)]
 
 
     async def run(self) -> List[NewsItemRawSchema]:
@@ -44,6 +44,8 @@ class NewsAcquisitionService:
 
         for name, fetcher in self.fetchers.items():
             if self.sources and name not in self.sources:
+                continue
+            if fetcher is None:
                 continue
             items = await fetcher.fetch_and_normalize()
             all_news.extend(items)

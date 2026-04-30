@@ -92,6 +92,7 @@ class RSSHubFetcher(BaseFetcher):
             "10jqka": self._fetch_10jqka_rss,
             "wallstreetcn": self._fetch_wallstreetcn_rss,
             "zhihu_people": self._fetch_zhihu_rss,
+            "jin10": self._fetch_jin10_rss,
         }
 
         enabled_sources = [k for k in self.rss_config.keys() if k in entry_fetchers]
@@ -328,6 +329,45 @@ class RSSHubFetcher(BaseFetcher):
                     "author": item.get("author"),
                     "categories" : [],
                     "attachments": attachment_dicts,
+                    "extra_data": {"rsshub": item}
+                }
+            )
+
+        return articles
+    
+    async def _fetch_jin10_rss(self) -> List[Dict[str, Any]]:
+        items_list = await self._get_items_list("jin10")
+        articles: List[Dict[str, Any]] = []
+        for item in items_list:
+            published_at = self._parse_published_rfc822(item.get("published"))
+
+            # Jin10 RSS 中 <link/> 经常为空，用 guid 兜底
+            link = item.get("link") or item.get("id", "")
+            if not link:
+                continue
+
+            # description 在 feedparser 中映射为 summary；Jin10 多为纯文本快讯
+            description_html = item.get("summary") or item.get("description") or ""
+            # 金十快讯一般无 HTML 附件，直接当正文
+            body_text = description_html
+
+            articles.append(
+                {
+                    'source_id': item.get("id", ""),
+
+                    "source_channel": "Jin10",
+                    "url": link,
+
+                    "publishedAt": published_at,
+                    "fetchedAt": datetime.now(timezone.utc),
+
+                    "title": item.get("title"),
+                    "description": description_html,
+                    "body": body_text,
+
+                    "author": item.get("author"),
+                    "categories" : [],
+                    "attachments": [],
                     "extra_data": {"rsshub": item}
                 }
             )

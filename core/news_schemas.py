@@ -11,7 +11,11 @@ from pydantic import BaseModel, Field, HttpUrl, field_validator
 from enum import Enum
 from typing import List, Optional, Dict, Any
 
-from datetime import datetime
+from datetime import datetime, timezone
+
+
+def _utc_now():
+    return datetime.now(timezone.utc)
 
 class Attachment(BaseModel):
     """
@@ -43,7 +47,7 @@ class NewsItemRefinedSchema(BaseModel):
     # --- 时间信息 ---
 
     published_at: datetime = Field(..., description="新闻的发布时间（UTC/带时区）。")
-    fetched_at: datetime = Field(default_factory=datetime.now, description="系统抓取并存入数据库的时间（UTC）。")
+    fetched_at: datetime = Field(default_factory=_utc_now, description="系统抓取并存入数据库的时间（UTC）。")
 
     # --- 内容主体 ---
 
@@ -80,7 +84,7 @@ class SupportingDocumentSchema(BaseModel):
     # --- 时间信息 ---
 
     published_at: datetime = Field(..., description="支持性文档的发布时间（UTC/带时区）。")
-    fetched_at: datetime = Field(default_factory=datetime.now, description="系统抓取并存入数据库的时间（UTC）。")
+    fetched_at: datetime = Field(default_factory=_utc_now, description="系统抓取并存入数据库的时间（UTC）。")
 
     # --- 内容主体 ---
 
@@ -116,7 +120,7 @@ class NewsItemRawSchema(BaseModel):
     # --- 时间信息 ---
     
     published_at: datetime = Field(..., description="新闻的发布时间（UTC/带时区）。")
-    fetched_at: datetime = Field(default_factory=datetime.now, description="系统抓取并存入数据库的时间（UTC）。")
+    fetched_at: datetime = Field(default_factory=_utc_now, description="系统抓取并存入数据库的时间（UTC）。")
 
     # --- 内容主体 ---
     

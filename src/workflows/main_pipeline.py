@@ -80,8 +80,8 @@ class NewsPilotPipeline:
             'translator_flag': True,
             'summarizer_flag': True,
             'target_language': 'zh',
-            'translator_model': 'deepseek',
-            'summarizer_model': 'deepseek',
+            'translator_model': 'qwen',
+            'summarizer_model': 'qwen',
         }
         
         self.insight_model = insight_model
@@ -415,8 +415,8 @@ def main():
             'translator_flag': True,
             'summarizer_flag': True,
             'target_language': 'zh',
-            'translator_model': 'deepseek',
-            'summarizer_model': 'deepseek',
+            'translator_model': 'qwen',
+            'summarizer_model': 'qwen',
         }
         
         # 创建并运行主流程

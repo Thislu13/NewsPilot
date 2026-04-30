@@ -33,8 +33,8 @@ NewsProcessingPipeline_DEFAULT_CONFIG = {
     },
     "summarizer": {
         'flag': True,
-        'model': "deepseek",
-        'model_id': "deepseek-chat",
+        'model': "qwen",
+        'model_id': "qwen-flash",
         'max_concurrent': 5
     },
     "embedding": {
@@ -49,17 +49,7 @@ NewsProcessingPipeline_DEFAULT_CONFIG = {
 
 class NewsProcessingPipeline:
     """
-    新闻处理流水线：图片识别 -> 翻译 -> 摘要 -> 向量化
-    - 图片识别：从新闻中的图片提取文字和核心信息，丰富新闻内容
-    - 翻译：将新闻标题、摘要、正文翻译成指定语言（默认为中文）
-    - 摘要：生成新闻摘要，提取关键信息
-        - 向量化：基于摘要生成文本向量，便于后续的相似度计算和检索(依赖摘要结果)
-        - 对齐：确保翻译和摘要结果的顺序和数量一致，返回对齐后的原始新闻和精炼新闻列表
-
-     - 结果返回：返回处理后的新闻列表，包括原始新闻和精炼新闻
-    
-    note: 处理流程中的每个步骤都是可选的，可以根据需要启用或禁用特定的处理模块。
-     - 例如，知乎文章只需要图片识别模块，返回raw_items和空的refined_items
+    新闻处理流水线：图片识别 -> 翻译 -> 摘要 -> 事件提取+embedding
     """
 
     def __init__(
@@ -71,9 +61,6 @@ class NewsProcessingPipeline:
 
 
     def run(self, raw_item: List[NewsItemRawSchema]) -> dict:
-        """
-        同步接口（外部调用），内部使用 asyncio.run
-        """
         return asyncio.run(self.process_async(raw_item))
 
 
@@ -84,53 +71,137 @@ class NewsProcessingPipeline:
         异步批量处理新闻：
         1. 图片识别
         2. 翻译标题、摘要、正文
-        3. 生成摘要
-            3-1. 生成 Embedding(依赖摘要结果)
-            3-2. 对齐翻译和摘要结果，确保顺序和数量一致
-        4. 返回处理结果
+        3. 生成摘要 + 对齐
+        4. 事件提取 + embedding → 写入 candidate_events
         """
         refined_items: List[NewsItemRefinedSchema] = []
-        
+
         if self.image_vision_flag == True:
-            # 异步图片识别
             raw_items = await self.image_vision.vision_batch(raw_item)
         if self.translotor_flag == True:
-            # 异步翻译
             raw_items = await self.translator.translate_batch(raw_items)
         if self.summarizer_flag == True:
-            # 异步生成摘要
             refined_items = await self.summarizer.summarize_batch(raw_items)
-            # 对齐翻译和摘要结果，确保顺序和数量一致, 返回的是(aligned_raw, aligned_refined)
             raw_items, refined_items = align_news_lists(raw_items, refined_items)
 
+        # Stage E: 事件提取 + embedding → 去重 → 写入
+        extracted_events = []
+        if self.event_extraction_flag and refined_items:
+            from src.data_acquisition.processors.module.event_extractor import EventExtractor
+            from src.storage.graph_repository import write_candidate_event, load_existing_event_embeddings
+            from src.graph.config import DEDUP_THRESHOLD
+            import numpy as np
+            import logging
+
+            logger = logging.getLogger("pipeline")
+            extractor = EventExtractor()
+            try:
+                # 1. 提取所有事件
+                for raw, refined in zip(raw_items, refined_items):
+                    try:
+                        events = await extractor.extract_from_refined(
+                            title=refined.title,
+                            abstract=refined.abstract,
+                            source_news_id=refined.unique_id,
+                            source_channel=refined.source_channel,
+                            source_url=refined.source_url,
+                            categories=refined.categories,
+                            published_at=refined.published_at,
+                            fetched_at=refined.fetched_at,
+                        )
+                        extracted_events.extend(
+                            [ev for ev in events if ev.event_text and ev.embedding]
+                        )
+                    except Exception as e:
+                        logger.warning(f"事件提取失败 (news={refined.unique_id}): {e}")
+
+                # 2. 语义去重
+                if extracted_events:
+                    existing_ids, existing_embs = load_existing_event_embeddings()
+
+                    new_embs = np.array(
+                        [ev.embedding for ev in extracted_events], dtype=np.float32
+                    )
+                    norms = np.linalg.norm(new_embs, axis=1, keepdims=True)
+                    norms[norms == 0] = 1
+                    new_embs_norm = new_embs / norms
+
+                    dup_mask = np.zeros(len(extracted_events), dtype=bool)
+
+                    # 与已有事件去重
+                    if existing_embs:
+                        ex_mat = np.array(existing_embs, dtype=np.float32)
+                        ex_norms = np.linalg.norm(ex_mat, axis=1, keepdims=True)
+                        ex_norms[ex_norms == 0] = 1
+                        ex_mat_norm = ex_mat / ex_norms
+                        sim_matrix = ex_mat_norm @ new_embs_norm.T
+                        dup_mask |= np.any(sim_matrix >= DEDUP_THRESHOLD, axis=0)
+
+                    # 新事件之间去重（保先去后）
+                    inner_sim = new_embs_norm @ new_embs_norm.T
+                    for i in range(len(extracted_events)):
+                        if dup_mask[i]:
+                            continue
+                        for j in range(i + 1, len(extracted_events)):
+                            if dup_mask[j]:
+                                continue
+                            if inner_sim[i, j] >= DEDUP_THRESHOLD:
+                                dup_mask[j] = True
+
+                    # 写入过滤后的事件
+                    kept_count = 0
+                    for idx, ev in enumerate(extracted_events):
+                        if dup_mask[idx]:
+                            continue
+                        write_candidate_event(
+                            event_id=ev.event_id,
+                            source_news_id=ev.source_news_id,
+                            source_channel=ev.source_channel,
+                            source_url=ev.source_url,
+                            categories=ev.categories,
+                            event_text=ev.event_text,
+                            embedding=ev.embedding,
+                            published_at=ev.published_at,
+                            fetched_at=ev.fetched_at,
+                        )
+                        kept_count += 1
+
+                    dup_count = int(dup_mask.sum())
+                    if dup_count > 0:
+                        logger.info(f"事件去重: {len(extracted_events)} → {kept_count} (过滤 {dup_count} 重复)")
+
+                    extracted_events = [
+                        ev for idx, ev in enumerate(extracted_events) if not dup_mask[idx]
+                    ]
+            finally:
+                await extractor.close()
 
         pipeline_result = {
             "raw_items": raw_items,
             "refined_items": refined_items,
+            "extracted_events": extracted_events,
         }
         return pipeline_result
 
     async def close(self):
-        """显式关闭资源"""
         if self.image_vision_flag == True:
             await self.image_vision.close()
         if self.translotor_flag == True:
             await self.translator.close()
         if self.summarizer_flag == True:
             await self.summarizer.close()
-    
+
     def _validate_config(self, config: dict):
-        """验证配置的有效性"""
         required_keys = ["image_vision", "translator", "summarizer", "embedding"]
         for key in required_keys:
             if key not in config:
                 raise ValueError(f"Missing config key: {key}")
-            
+
     def _read_config(self, config: dict):
-        """从配置字典中读取参数并初始化模块"""
         self.image_vision_flag = config["image_vision"]["flag"]
         self.translotor_flag = config["translator"]["flag"]
         self.summarizer_flag = config["summarizer"]["flag"]
+        self.event_extraction_flag = config.get("event_extraction", {}).get("flag", True)
 
         if self.image_vision_flag:
             self.image_vision = ImageVision(

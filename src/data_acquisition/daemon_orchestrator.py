@@ -43,7 +43,7 @@ class DaemonOrchestrator:
         self.repo = StorageRepository()
 
         # 初始化采集服务
-        self.acquisition_service = NewsAcquisitionService(config= settings.NEWS_SOURCES_CONFIG, attachments_root="data/attachments")  
+        self.acquisition_service = NewsAcquisitionService(config= settings.NEWS_SOURCES_CONFIG, attachments_root=None)  
         # 初始化处理服务，传入配置
         self.processing_service = NewsProcessingService(newspilot_config=settings.NewsProcessingPipeline_DEFAULT_CONFIG)
 

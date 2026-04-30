@@ -12,11 +12,11 @@
 # 新闻源配置
 NEWS_SOURCES_CONFIG = {
     "newsapi": {
-        'flag': True,
+        'flag': False,
     },
     "rsshub": {
         'flag': True,
-        "choice": ["reuters", "bloomberg", "eastmoney", "cls", "bbc", "ftchinese", "10jqka", "wallstreetcn"]
+        "choice": ["reuters", "bloomberg", "eastmoney", "cls", "bbc", "ftchinese", "10jqka", "wallstreetcn", "jin10"]
     }
 }
 
@@ -86,6 +86,14 @@ RSS_CONFIG = {
             '/live'
         ]
     },
+
+    # https://docs.rsshub.app/zh/routes/jin10
+    # 金十数据
+    'jin10': {
+        'url':'/jin10',
+        "options":[
+        ]  
+    },
 }
 
 ZHIHU_RSS_CONFIG = {
@@ -128,8 +136,8 @@ NewsProcessingPipeline_DEFAULT_CONFIG = {
     },
     "summarizer": {
         'flag': True,
-        'model': "deepseek",
-        'model_id': "deepseek-chat",
+        'model': "qwen",
+        'model_id': "qwen-flash",
         'max_concurrent': 5
     },
     "embedding": {
@@ -138,6 +146,12 @@ NewsProcessingPipeline_DEFAULT_CONFIG = {
         'model_id': "text-embedding-v4",
         'dimensions': 1024,
         'encoding_format': "float",
+        'max_concurrent': 5
+    },
+    "event_extraction": {
+        'flag': True,
+        'model': "qwen",
+        'model_id': "qwen-flash",
         'max_concurrent': 5
     }
 }
@@ -155,3 +169,58 @@ EMAIL_CONFIG = {
 
 SUBSCRIPTION_ALLOWED_REPORT_KEYS = ["daily_report", "zhihu_dang_report"]
 SUBSCRIPTION_ALLOWED_CHANNELS = ["email"]
+
+
+# ============================================================
+# 建图配置
+# ============================================================
+
+# 建图守护进程
+GRAPH_DAEMON_CONFIG = {
+    "ingest_hours": [0, 6, 12, 18],  # UTC 定点建图时间
+    "periodic_update_weekday": 6,     # UTC 周日=6, 定期描述更新
+    "periodic_update_hour": 22,       # UTC 22:00 执行定期更新
+}
+
+# UMAP 全局模型
+UMAP_GLOBAL_N_NEIGHBORS = 10
+UMAP_GLOBAL_MIN_DIST = 0.0
+UMAP_GLOBAL_METRIC = "cosine"
+UMAP_GLOBAL_N_COMPONENTS = 30
+
+# UMAP 分裂场景
+UMAP_SPLIT_N_NEIGHBORS = 8
+UMAP_SPLIT_N_COMPONENTS = 2
+
+# HDBSCAN 初始聚类
+HDBSCAN_MIN_CLUSTER_SIZE = 5
+HDBSCAN_MIN_SAMPLES = 1
+HDBSCAN_METRIC = "euclidean"
+
+# HDBSCAN 分裂场景
+HDBSCAN_SPLIT_MIN_CLUSTER_SIZE = 5
+HDBSCAN_SPLIT_MIN_SAMPLES = 2
+
+# 阈值
+MATCH_THRESHOLD = 0.6
+SPLIT_THRESHOLD = 100
+MERGE_THRESHOLD_INNER = 0.85
+MERGE_THRESHOLD_CROSS = 0.90
+DEDUP_THRESHOLD = 0.95
+MAX_MEMBERSHIPS = 5
+BATCH_SIZE = 200
+
+# Embedding
+EMBEDDING_MODEL = "text-embedding-v4"
+EMBEDDING_DIMENSIONS = 768
+EMBEDDING_ENCODING_FORMAT = "float"
+
+# 建图 LLM
+GRAPH_LLM_MODEL = "qwen3.5-flash"
+GRAPH_LLM_TIMEOUT = 90
+GRAPH_LLM_MAX_RETRIES = 3
+GRAPH_LLM_MAX_SAMPLE = 500
+
+# 模型持久化
+MODEL_DIR = "models"
+UMAP_MODEL_FILE = "umap_global.pkl"

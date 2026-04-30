@@ -7,16 +7,18 @@
  * Copyright (c) 2026, All Rights Reserved.
 -->
 
-# NewsPilot 系统架构 (V0.2)
+# NewsPilot 系统架构 (V0.3)
 
 ## 1. 项目概述 (Project Overview)
 
-NewsPilot 是一套模块化的智能新闻分析系统，旨在通过自动化流水线完成全球新闻的采集、处理及语义理解。系统支持多种核心运行模式：
+NewsPilot 是一套模块化的智能新闻分析系统，旨在通过自动化流水线完成全球新闻的采集、处理、语义理解及事件图谱构建。系统支持多种核心运行模式：
 
 - **通用日报生成**: 面向行业动态的专业研报
+- **事件图谱构建**: 从新闻中抽取事件，通过 UMAP + HDBSCAN + LLM 智能聚类，构建多层树形事件簇
 - **投资分析**: 基于 Agent + Skill 架构的自动化价值投资分析
 - **知乎热点追踪**: 社交媒体内容采集与分析
 - **个性化洞察**: 基于用户画像的定制化情报
+- **远程同步展示**: 本地图谱自动同步至远程服务器，驱动 www.newspilot.cc 前端实时展示
 
 ---
 
@@ -29,6 +31,11 @@ NewsPilot/
 ├── config/                         # [配置中心]
 │   ├── keys.py                     # API 密钥与凭证
 │   ├── prompts.py                  # LLM 提示词库
+│   ├── prompts/                    # 模块化 Prompt
+│   │   ├── event_extraction_prompt.py
+│   │   ├── cluster_analysis_prompt.py
+│   │   ├── daily_review_prompt.py
+│   │   └── periodic_update_prompt.py
 │   ├── settings.py                 # 系统通用配置
 │   ├── workflow_service.json       # 服务运行配置
 │   ├── zhihu_user_config.py        # 知乎用户配置
@@ -75,11 +82,26 @@ NewsPilot/
     │   │       ├── translator.py   # 翻译
     │   │       ├── summarizer.py   # 摘要
     │   │       ├── embedding.py    # 向量化
-    │   │       └── normalize.py    # 清洗
+    │   │       ├── normalize.py    # 清洗
+    │   │       └── event_extractor.py  # 事件抽取
     │   └── module/                 # 底层爬虫工具
     │       ├── download.py
     │       ├── get_content.py
     │       └── paser_html.py
+    │
+    ├── graph/                      # [图谱层] 事件理解与聚类
+    │   ├── schema.py               # 事件/簇数据模型
+    │   ├── daemon.py               # 建图守护进程
+    │   ├── ingest.py               # 事件入库主流程
+    │   ├── clusterer.py            # UMAP + HDBSCAN 聚类
+    │   ├── matcher.py              # 事件-簇匹配
+    │   ├── daily_updater.py        # 每日描述更新
+    │   ├── periodic_updater.py     # 周日定期大更新
+    │   ├── embedder.py             # Embedding 生成
+    │   ├── config.py               # 图谱配置
+    │   ├── client.py               # 共享 LLM 客户端
+    │   └── models/                 # 持久化模型 (UMAP)
+    │
     │
     ├── distribution/               # [分发层]
     │   ├── email_sender.py         # 邮件发送
@@ -119,15 +141,23 @@ NewsPilot/
     │           ├── value-investment-strategy/  # 价值投资框架
     │           └── investment-report-skill/    # 投资日报生成
     │
+    ├── scripts/                    # [脚本]
+    │   ├── sync_to_server.sh       # 远程同步脚本
+    │   ├── generate_digest_json.py # Digest JSON 生成
+    │   └── inspect_remote_db.py    # 远程数据库检查
+    │
     ├── storage/                    # [持久化层]
     │   ├── models.py               # SQL Alchemy ORM 模型
     │   ├── repository.py           # 数据库仓储模式
+    │   ├── graph_repository.py     # 图谱数据库操作层
+    │   ├── remote_sync.py          # 远程数据库推送
     │   ├── subscription_repository.py  # 订阅数据管理
     │   └── db_config.py            # 数据库连接设置
     │
     └── workflows/                  # [入口点]
         ├── run_service.py          # 统一服务入口
         ├── run_news_service.py     # 新闻采集服务
+        ├── run_graph_service.py    # 事件图谱服务
         ├── run_daily_report.py     # 通用日报生成
         ├── run_investment_report.py    # 投资日报生成
         ├── run_subscription_admin.py   # 订阅管理后台
@@ -154,7 +184,7 @@ NewsPilot/
 *   **组件**: `DaemonOrchestrator` (`src/data_acquisition/daemon_orchestrator.py`)
 *   **工作流程**:
     1.  **采集任务**: 周期性使用 `fetchers/` 中的适配器获取原始数据
-    2.  **处理工作流**: 执行清洗、翻译 (LLM)、摘要 (LLM) 和向量化嵌入
+    2.  **处理工作流**: 执行清洗、翻译 (LLM)、摘要 (LLM) 和**事件抽取**
     3.  **存储**: 将精炼后的数据持久化至 PostgreSQL (支持 pgvector)
 
 #### B. 知乎采集服务 (Zhihu Acquisition)
@@ -163,6 +193,20 @@ NewsPilot/
 *   **入口点**: `src/workflows/zhihu_ananlysis_service/run_zhihu_analysis_service.py`
 *   **组件**: `ZhihuDaemonOrchestrator`, `ZhihuProcessingWorker`
 *   **功能**: 采集知乎热门内容，生成结构化热点报告
+
+#### C. 事件图谱服务 (Event Graph)
+从新闻中抽取独立事件，通过智能聚类构建结构化事件网络。
+
+*   **入口点**: `src/workflows/run_graph_service.py`
+*   **运行模式**: 守护进程服务 (定点调度 UTC 0/6/12/18)
+*   **组件**: `GraphDaemon` (`src/graph/daemon.py`)
+*   **工作流程**:
+    1.  **事件匹配**: 新事件与已有簇 centroid 进行余弦相似度匹配
+    2.  **智能聚类**: `UMAP`(768D→30D) + `HDBSCAN` 对 detained 事件聚类
+    3.  **LLM 审核**: `DailyUpdater` 审核事件归属，更新 `recent_description`
+    4.  **簇分裂/合并**: 大簇自动分裂，相似簇跨层合并
+    5.  **定期更新**: 每周日执行全量 `weekly_description` + `detailed_description` 更新
+    6.  **远程同步**: 自动推送至远程服务器，驱动前端展示
 
 ### 3.2 Agent 智能层 (Agent Intelligence Layer)
 
@@ -244,15 +288,23 @@ NewsPilot/
 
 ### 4.1 数据层 (`src/data_acquisition`)
 *   **Fetchers**: 模块化适配器支持多种新闻源
-*   **Processors**: 流水线架构 (`pipeline.py`)，编排翻译、摘要、向量化等步骤
+*   **Processors**: 流水线架构 (`pipeline.py`)，编排翻译、摘要、**事件抽取**等步骤
+*   **EventExtractor**: 从精炼新闻中抽取独立事件并生成 embedding
 
-### 4.2 Agent 层 (`src/module/agent`)
+### 4.2 图谱层 (`src/graph`)
+*   **EventClusterer**: `UMAP` + `HDBSCAN` 核心聚类，支持冷启动/增量/分裂三种模式
+*   **ClusterMatcher**: 基于 cosine 相似度的事件-簇匹配
+*   **DailyUpdater**: LLM 审核归属 + 每日描述更新
+*   **PeriodicUpdater**: 周日定期全量描述更新（自底向上）
+*   **GraphDaemon**: 定点调度守护进程
+
+### 4.3 Agent 层 (`src/module/agent`)
 *   **SimpleAgent**: 核心 Agent 实现，支持工具调用和 sub-agent 创建
 *   **LiteLLM Provider**: 统一接口支持 Gemini/DeepSeek/Qwen 等多个模型
 *   **Tool Registry**: 动态工具注册与管理
 *   **Skill Loader**: Markdown-based Skill 加载系统
 
-### 4.3 工具集 (`src/module/agent/tools`)
+### 4.4 工具集 (`src/module/agent/tools`)
 | 工具 | 功能 | 数据源 |
 |-----|------|--------|
 | `A_Stock_Profile` | A股个股基本面 | akshare |
@@ -263,10 +315,13 @@ NewsPilot/
 | `WebSearch/WebFetch` | Web 搜索与抓取 | Brave API |
 | `Spawn` | 创建 Sub-agent | - |
 
-### 4.4 存储层 (`src/storage`)
+### 4.5 存储层 (`src/storage`)
 *   **Repository Pattern**: 抽象数据库交互
+*   **GraphRepository**: 图谱专用数据库操作层（`graph_repository.py`）
+*   **RemoteSync**: 远程数据库推送（`remote_sync.py`）
 *   **SubscriptionRepository**: 订阅管理专用仓储
 *   **pgvector**: 支持向量存储与语义检索
+*   **事件图谱表**: `candidate_events`, `processed_events`, `event_clusters`, `event_membership`
 
 ---
 
@@ -283,6 +338,9 @@ python -m src.workflows.run_news_service
 
 # 单独启动知乎采集服务
 python -m src.workflows.zhihu_ananlysis_service.run_zhihu_analysis_service
+
+# 单独启动事件图谱服务
+python -m src.workflows.run_graph_service
 
 # 启动订阅管理后台
 python -m src.workflows.run_subscription_admin
@@ -303,26 +361,36 @@ python -m src.workflows.main_pipeline
 
 ---
 
-## 6. 发布状态 (V0.2)
+## 6. 发布状态 (V0.3)
 
-### V0.2 新增功能
+### V0.3 新增功能
+*   **事件图谱系统**: 从新闻中抽取独立事件，通过 UMAP + HDBSCAN + LLM 智能聚类，构建多层树形事件簇
+*   **事件抽取模块**: `EventExtractor` 从精炼新闻中提取事件并生成 embedding
+*   **建图守护进程**: `GraphDaemon` 定点调度（UTC 0/6/12/18），支持每日描述更新 + 周日定期大更新
+*   **远程同步**: 本地 PostgreSQL 自动同步至远程服务器，驱动 www.newspilot.cc 前端实时展示
+*   **智能聚类引擎**: 支持冷启动/增量/分裂三种模式，LLM 审核事件归属
+
+### V0.2 已有功能
 *   **Agent 投资分析系统**: 基于 SimpleAgent + Skill 的自动化价值投资分析
-*   **知乎热点追踪**: 新增知乎内容采集与分析服务
+*   **知乎热点追踪**: 知乎内容采集与分析服务
 *   **订阅管理系统**: Web 后台管理订阅者与分发配置
 *   **Skill 系统**: Markdown-based 可扩展 Skill 框架
 *   **多模型支持**: 通过 LiteLLM 统一接入 Gemini/DeepSeek/Qwen
 
 ### 功能能力
-*   从采集到分析的全栈自动化
+*   从采集到事件图谱构建的全栈自动化
+*   结构化事件网络：支持热点追踪、话题演变、新信号发现
 *   双模式运行（后台服务 + 按需报告）
 *   Agent 驱动的智能投资分析
 *   灵活的订阅管理与分发
+*   远程同步与在线展示
 
 ### 基础设施
-*   PostgreSQL + pgvector
+*   PostgreSQL + pgvector (向量存储 + 事件图谱)
 *   Docker 容器化支持
 *   统一日志系统
+*   UMAP 模型持久化
 
 ---
 
-*本文档最后更新：2026-03-15*
+*本文档最后更新：2026-04-30*

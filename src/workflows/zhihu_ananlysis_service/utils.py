@@ -8,7 +8,7 @@
 import argparse
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List
 
@@ -94,8 +94,8 @@ def is_first_run_complete() -> bool:
 def mark_first_run_complete():
     """标记首次运行初始化为已完成。"""
     FIRST_RUN_FLAG.parent.mkdir(parents=True, exist_ok=True)
-    FIRST_RUN_FLAG.write_text(datetime.now().isoformat(), encoding="utf-8")
-    logger.info(f"First run completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    FIRST_RUN_FLAG.write_text(datetime.now(timezone.utc).isoformat(), encoding="utf-8")
+    logger.info(f"First run completed at {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}")
 
 
 def normalize_title_for_filename(title: str) -> str:
@@ -120,7 +120,7 @@ def save_markdown_file(
     markdown_dir: Path = MARKDOWN_DIR
 ) -> str:
     """保存 Markdown 输出并返回文件路径。"""
-    published = published_at or datetime.utcnow()
+    published = published_at or datetime.now(timezone.utc)
     date_folder = published.strftime("%Y-%m-%d")
     target_dir = markdown_dir / date_folder
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -144,7 +144,7 @@ def save_json_file(
     if json_dir is None:
         json_dir = MARKDOWN_DIR / "raw_json"
 
-    published = published_at or datetime.utcnow()
+    published = published_at or datetime.now(timezone.utc)
     date_folder = published.strftime("%Y-%m-%d")
     target_dir = json_dir / date_folder
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -217,7 +217,7 @@ async def send_markdown_email(md_file: Path):
                         </div>
                         {html_content}
                         <div class="footer">
-                            发送时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+                            发送时间: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
                         </div>
                     </body>
                     </html>
